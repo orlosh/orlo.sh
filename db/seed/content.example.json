@@ -1,0 +1,96 @@
+{
+  "profile": {
+    "displayName": "orlo.sh",
+    "headline": "Full Stack · DevOps · Security",
+    "location": null,
+    "summary": "Example content. Create db/seed/content.local.json (git-ignored) with your own data, or edit everything from /admin after seeding.",
+    "contactEmail": null
+  },
+  "links": [],
+  "stack": [
+    {
+      "name": "Frontend",
+      "slug": "frontend",
+      "items": [
+        [
+          "TypeScript",
+          "typescript"
+        ],
+        [
+          "React",
+          "react"
+        ],
+        [
+          "Next.js",
+          "nextjs"
+        ]
+      ]
+    },
+    {
+      "name": "Backend",
+      "slug": "backend",
+      "items": [
+        [
+          "Node.js",
+          "nodejs"
+        ],
+        [
+          "PostgreSQL",
+          "postgresql"
+        ]
+      ]
+    },
+    {
+      "name": "DevOps",
+      "slug": "devops",
+      "items": [
+        [
+          "Docker",
+          "docker"
+        ],
+        [
+          "GitHub Actions",
+          "github-actions"
+        ]
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "company": "Example Co.",
+      "publicCompany": null,
+      "role": "Example role",
+      "startDate": "2024-01-01",
+      "endDate": null,
+      "highlights": [
+        "Example highlight: replace from /admin."
+      ],
+      "technologies": [
+        "docker"
+      ]
+    }
+  ],
+  "education": [],
+  "languages": [],
+  "projects": [
+    {
+      "slug": "portfolio",
+      "title": "Este portfolio",
+      "summary": "Aplicación full-stack con panel de administración, PostgreSQL, autenticación, CI/CD y observabilidad. El contenido que estás leyendo sale de su base de datos.",
+      "published": true,
+      "featured": true,
+      "overview": "El portfolio es una aplicación Next.js con un panel `/admin` que edita el contenido en PostgreSQL. Las páginas públicas se renderizan en servidor y leen de una capa de datos cacheada que se invalida por etiquetas en cada cambio. La arquitectura completa está en [/engineering](/engineering).",
+      "architecture": "Un proyecto Next.js (App Router) desplegado en Vercel sirve las páginas públicas, el panel de administración, la API de solo lectura `/api/v1` y `/health`. PostgreSQL está en Neon y la aplicación entra por su pooler. No hay microservicios ni servidores propios: el tamaño del proyecto no los justifica.",
+      "security": "- Dos roles de base de datos: el de migraciones (DDL) y el de runtime (solo DML). El runtime no puede modificar ni borrar el `audit_log`.\n- CSP con nonce por petición, sin `unsafe-inline` en scripts.\n- Sesiones de Better Auth en cookies `HttpOnly`, `Secure`, `SameSite=Lax`; registro público deshabilitado.\n- Validación con Zod en cada frontera (formularios, API, variables de entorno).",
+      "decisions": "- **Next.js frente a Astro**: el panel de administración, la autenticación y la invalidación de caché viven en el mismo proceso; con Astro habría hecho falta un segundo servicio.\n- **SSR + caché por etiquetas en lugar de SSG**: el contenido cambia desde `/admin` y la CSP con nonce exige render por petición. La base de datos no es necesaria para compilar.\n- **Vercel + Neon frente a un VPS**: coste cero y ningún servidor que mantener, a cambio de depender de dos proveedores y de sus límites gratuitos.",
+      "diagram": "@system",
+      "technologies": [
+        "nextjs",
+        "react",
+        "typescript",
+        "postgresql",
+        "docker"
+      ]
+    }
+  ]
+}

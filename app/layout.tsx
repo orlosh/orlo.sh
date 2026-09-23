@@ -1,35 +1,38 @@
-import type { Metadata } from "next";
-import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { IBM_Plex_Mono, Newsreader, Schibsted_Grotesk } from "next/font/google";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
-const spaceGrostesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+// Autoalojada en el build por next/font: ningún origen de fuentes de terceros en la CSP.
+const sans = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-sans-family", display: "swap" });
+const mono = IBM_Plex_Mono({
   subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono-family",
+  display: "swap",
 });
-
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const serif = Newsreader({
   subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-serif-family",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Portfolio - Wilson",
-  description:
-    "Desarrollador Full Stack y DevOps, creando soluciones innovadoras. ¡Explora mi portafolio y descubre lo que puedo hacer! 🚀",
+  metadataBase: new URL(siteUrl()),
+  robots: { index: true, follow: true },
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const viewport: Viewport = {
+  themeColor: "#f5f8f6",
+  colorScheme: "light",
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es">
-      <body
-        className={`bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-200 selection:bg-primary selection:text-background-dark ${spaceGrostesk.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html lang="es" className={`${sans.variable} ${mono.variable} ${serif.variable}`}>
+      <body className="min-h-dvh">{children}</body>
     </html>
   );
 }

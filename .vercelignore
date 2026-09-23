@@ -1,0 +1,9 @@
+# Nunca subir a Vercel: contenido privado, secretos locales ni artefactos.
+db/seed/*.local.json
+.env
+.env.*
+!.env.example
+docs/self-hosting
+test-results
+playwright-report
+coverage

@@ -1,0 +1,179 @@
+# Pipeline: calidad → integración → seguridad → E2E → despliegue en Vercel.
+#
+# Los E2E corren contra un stack efímero (Docker Compose + PostgreSQL de CI),
+# nunca contra producción: el flujo del panel escribe datos. Producción solo
+# recibe un smoke test de solo lectura tras el despliegue.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.23.2
+  VERCEL_CLI: vercel@59.25.0
+
+jobs:
+  quality:
+    name: Lint · typecheck · tests unitarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint --max-warnings=0
+      - run: pnpm typecheck
+      - run: pnpm vitest run --project unit
+
+  integration:
+    name: Tests de integración (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-superuser
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPASSWORD: ci-superuser
+      POSTGRES_USER: postgres
+      DB_OWNER_PASSWORD: ci-owner
+      DB_APP_PASSWORD: ci-app
+      DB_NAME: portfolio
+      CREATE_TEST_DB: "true"
+      TEST_DATABASE_URL: postgres://portfolio_app:ci-app@localhost:5432/portfolio_test
+      TEST_MIGRATION_DATABASE_URL: postgres://portfolio_owner:ci-owner@localhost:5432/portfolio_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Mismo modelo de roles que producción: propietario (DDL) + app (solo DML).
+      - run: sh docker/postgres/10-roles.sh
+      - run: pnpm vitest run --project integration
+
+  security:
+    name: Auditoría de dependencias · secretos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Auditar dependencias de producción (falla con high/critical)
+        run: pnpm audit --prod --audit-level=high
+      - name: Buscar secretos en todo el historial de git
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    name: E2E (stack efímero)
+    needs: [quality, integration, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_VERSION: ${{ github.sha }}
+      E2E_ADMIN_EMAIL: e2e@example.test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generar secretos desechables para el stack de CI
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "DB_OWNER_PASSWORD=$(openssl rand -hex 16)"
+            echo "DB_APP_PASSWORD=$(openssl rand -hex 16)"
+            echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
+          } > .env
+          echo "E2E_ADMIN_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+
+      - name: Construir y arrancar el stack (BD → migraciones + seed de ejemplo → app)
+        run: docker compose up --build --detach --wait --wait-timeout 180
+
+      - name: Crear el admin de E2E
+        run: >-
+          docker compose run --rm -e ADMIN_EMAIL=$E2E_ADMIN_EMAIL -e ADMIN_PASSWORD=$E2E_ADMIN_PASSWORD
+          migrate node_modules/.bin/tsx scripts/create-admin.ts
+
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+      - if: failure()
+        run: docker compose logs --no-color > compose.log
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            playwright-report
+            compose.log
+          retention-days: 7
+
+  deploy:
+    name: Despliegue en producción (Vercel + Neon)
+    needs: e2e
+    # Solo en main, y solo cuando el environment "production" está configurado
+    # (variable DEPLOY_ENABLED=true). Mientras tanto el job se salta.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Se incrusta en el build (next.config.ts) y /health la devuelve:
+      # el smoke test la usa para confirmar que producción sirve este commit.
+      APP_VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # Primero las migraciones, con el rol propietario y la conexión directa
+      # (sin pooler). Son aditivas, así que la versión anterior sigue funcionando
+      # con el esquema nuevo durante los segundos que tarda el despliegue.
+      - name: Migraciones en Neon
+        run: pnpm db:migrate
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NEON_MIGRATION_URL }}
+
+      # El build se hace aquí, en CI, y se sube ya construido: Vercel no compila
+      # nada que no haya pasado por este pipeline.
+      - name: Descargar la configuración del proyecto de Vercel
+        run: pnpm dlx ${{ env.VERCEL_CLI }} pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build
+        run: pnpm dlx ${{ env.VERCEL_CLI }} build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Desplegar el build
+        run: pnpm dlx ${{ env.VERCEL_CLI }} deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Smoke test contra el dominio de producción
+        run: pnpm smoke "${{ vars.APP_URL }}" "${{ github.sha }}"

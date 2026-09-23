@@ -1,0 +1,33 @@
+# Los certificados TLS se obtienen y renuevan automáticamente (ACME).
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		-Server
+	}
+
+	# Las mutaciones del admin y las peticiones a la API son pequeñas; los cuerpos demasiado
+	# grandes se rechazan pronto.
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy app:3000 {
+		# Sobrescribir, nunca añadir: la app confía en esta cabecera (TRUST_PROXY=true),
+		# así que un valor enviado por el cliente no debe sobrevivir al proxy.
+		header_up X-Forwarded-For {remote_host}
+		health_uri /health
+		health_interval 30s
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Redirigir www al dominio raíz (apex).
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}

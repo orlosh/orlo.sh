@@ -1,0 +1,95 @@
+# Stack de producción en un único VPS. Vive en el servidor junto al Caddyfile y el .env.
+#   IMAGE_TAG=<git sha> ./deploy.sh
+#
+# Redes:
+#   edge     Caddy <-> app. Solo Caddy publica puertos.
+#   backend  app <-> db. Interna: sin ruta a internet ni puertos publicados.
+name: portfolio
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
+    depends_on:
+      app: { condition: service_healthy }
+
+  app:
+    <<: *hardening
+    image: ${IMAGE_REPO:?set IMAGE_REPO}:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://portfolio_app:${DB_APP_PASSWORD}@db:5432/${DB_NAME:-portfolio}
+      APP_URL: https://${SITE_DOMAIN}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      TRUSTED_IP_HEADER: x-forwarded-for
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    tmpfs:
+      - /app/.next/cache:uid=1000,gid=1000
+      - /tmp
+    networks: [edge, backend]
+    depends_on:
+      db: { condition: service_healthy }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?set DB_APP_PASSWORD}
+      DB_NAME: ${DB_NAME:-portfolio}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./10-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DB_NAME:-portfolio}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Jobs puntuales (`up` nunca los arranca): migraciones, seed, creación del admin.
+  migrate:
+    image: ${IMAGE_REPO}-migrator:${IMAGE_TAG}
+    environment:
+      DATABASE_URL: postgres://portfolio_app:${DB_APP_PASSWORD}@db:5432/${DB_NAME:-portfolio}
+      MIGRATION_DATABASE_URL: postgres://portfolio_owner:${DB_OWNER_PASSWORD}@db:5432/${DB_NAME:-portfolio}
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
+    profiles: [jobs]
+
+networks:
+  edge: {}
+  backend:
+    internal: true
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

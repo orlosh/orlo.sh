@@ -1,16 +1,160 @@
 @import "tailwindcss";
-@import "material-symbols";
 
+/*
+ * Paleta: los tokens de Tailwind originales del proyecto, sin cambios. No se añade nada más
+ * salvo slate / white / red-500 del propio Tailwind, que el marcado original ya usaba.
+ * Claro por defecto, como en el layout original (bg-background-light + text-slate-800).
+ *
+ *   background-light  fondo de la página
+ *   white             superficies elevadas (tarjetas, formularios)
+ *   carbon            tinta para títulos, filetes marcados y los paneles oscuros de «pantalla»
+ *   border-dark       líneas finas (con baja opacidad) y la cuadrícula de puntos
+ *   primary           lo único vivo en cada pantalla: solo rellenos y marcadores,
+ *                     nunca texto sobre fondo claro (1.4:1)
+ *   background-dark   el fondo más profundo dentro de los paneles oscuros
+ */
 @theme inline {
   --color-primary: #0df259;
   --color-background-light: #f5f8f6;
   --color-background-dark: #0a0a0a;
   --color-carbon: #121212;
   --color-border-dark: #28392e;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-  --border-radius: 0.25rem;
-  --border-radius-lg: 0.5rem;
-  --border-radius-xl: 0.75rem;
-  --border-radius-full: 9999px;
+
+  --font-sans: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-family), ui-monospace, "SFMono-Regular", monospace;
+  --font-serif: var(--font-serif-family), ui-serif, Georgia, serif;
+  --font-display: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --focus: var(--color-carbon);
+  }
+
+  body {
+    @apply bg-background-light font-sans text-slate-800 antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary text-background-dark;
+  }
+
+  /* Un único estilo de foco en todas partes, nunca eliminado. Carbón sobre claro, verde sobre
+     paneles oscuros. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .on-dark {
+    --focus: var(--color-primary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Voz de máquina: etiqueta monoespaciada en mayúsculas. */
+  .label {
+    @apply font-mono text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-slate-600;
+  }
+  .on-dark .label {
+    @apply text-slate-400;
+  }
+
+  /* La cuadrícula de puntos de orlo.sh. */
+  .dot-grid {
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--color-border-dark) 28%, transparent) 1px,
+      transparent 1.2px
+    );
+    background-size: 22px 22px;
+  }
+  .dot-grid-fade {
+    mask-image: linear-gradient(to bottom, black 35%, transparent);
+  }
+  .on-dark .dot-grid,
+  .dot-grid-dark {
+    background-image: radial-gradient(
+      /* Tailwind slate-400 */
+      color-mix(in srgb, #94a3b8 22%, transparent) 1px,
+      transparent 1.2px
+    );
+    background-size: 22px 22px;
+  }
+
+  /* Subrayador: el verde usado como marcador detrás del texto en carbón. */
+  .mark {
+    background-image: linear-gradient(transparent 58%, var(--color-primary) 58%, var(--color-primary) 92%, transparent 92%);
+    padding-inline: 0.04em;
+  }
+
+  /* El borde vivo: línea fina con un segmento verde donde algo está activo. */
+  .live-edge {
+    position: relative;
+    height: 1px;
+    background: color-mix(in srgb, var(--color-border-dark) 20%, transparent);
+  }
+  .live-edge::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -1px;
+    height: 3px;
+    width: 5rem;
+    background: var(--color-primary);
+    animation: edge-travel 700ms var(--ease-standard) both;
+  }
+  @keyframes edge-travel {
+    from {
+      transform: translateX(-5rem);
+      opacity: 0;
+    }
+  }
+
+  /* Enlaces: texto en carbón, subrayado verde que se engrosa al pasar el cursor. */
+  .link {
+    @apply text-carbon underline decoration-primary decoration-2 underline-offset-[5px] transition-[text-decoration-thickness] duration-150 hover:decoration-[6px];
+  }
+  .on-dark .link {
+    @apply text-white;
+  }
+
+  .panel {
+    @apply rounded-md border border-border-dark/15 bg-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-sm border border-border-dark/15 bg-white px-2 py-0.5 font-mono text-xs text-slate-700;
+  }
+  .on-dark .chip {
+    @apply border-white/15 bg-white/5 text-slate-200;
+  }
+
+  /* Escala del hero compartida por las palabras y sus anotaciones para que las filas se alineen. */
+  .hero-type {
+    --hero-size: clamp(3.25rem, 9.5vw, 7rem);
+    font-size: var(--hero-size);
+    line-height: 0.95;
+  }
+  .hero-row {
+    height: calc(var(--hero-size) * 0.95);
+  }
 }
