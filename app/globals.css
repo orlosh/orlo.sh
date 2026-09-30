@@ -1,17 +1,11 @@
 @import "tailwindcss";
 
 /*
- * Paleta: los tokens de Tailwind originales del proyecto, sin cambios. No se añade nada más
- * salvo slate / white / red-500 del propio Tailwind, que el marcado original ya usaba.
- * Claro por defecto, como en el layout original (bg-background-light + text-slate-800).
- *
- *   background-light  fondo de la página
- *   white             superficies elevadas (tarjetas, formularios)
- *   carbon            tinta para títulos, filetes marcados y los paneles oscuros de «pantalla»
- *   border-dark       líneas finas (con baja opacidad) y la cuadrícula de puntos
- *   primary           lo único vivo en cada pantalla: solo rellenos y marcadores,
- *                     nunca texto sobre fondo claro (1.4:1)
- *   background-dark   el fondo más profundo dentro de los paneles oscuros
+ * Paleta: los tokens de Tailwind originales del proyecto más slate / white / red-500 (solo errores).
+ * El sitio público es una pantalla de terminal: negro, texto claro y el verde primary como
+ * fósforo en enlaces, botones y detalles (13:1 sobre negro). El panel de administración sigue
+ * en claro. Para no mezclar ambos, los estilos del sitio público cuelgan
+ * de la variante `site:` (cualquier elemento dentro de `.site`).
  */
 @theme inline {
   --color-primary: #0df259;
@@ -20,10 +14,8 @@
   --color-carbon: #121212;
   --color-border-dark: #28392e;
 
-  --font-sans: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono-family), ui-monospace, "SFMono-Regular", monospace;
-  --font-serif: var(--font-serif-family), ui-serif, Georgia, serif;
-  --font-display: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-mono-family), ui-monospace, Menlo, Consolas, monospace;
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -31,6 +23,8 @@
 
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
+
+@custom-variant site (&:where(.site, .site *));
 
 @layer base {
   :root {
@@ -42,20 +36,21 @@
     @apply bg-background-light font-sans text-slate-800 antialiased;
   }
 
-  ::selection {
-    @apply bg-primary text-background-dark;
+  /* El sitio público entero va en la monoespaciada, como una terminal. */
+  .site {
+    color-scheme: dark;
+    --focus: var(--color-primary);
+    @apply bg-background-dark font-mono text-[1.0625rem] text-slate-300;
   }
 
-  /* Un único estilo de foco en todas partes, nunca eliminado. Carbón sobre claro, verde sobre
-     paneles oscuros. */
+  ::selection {
+    @apply bg-primary text-carbon;
+  }
+
+  /* Un único estilo de foco en todas partes, nunca eliminado. */
   :focus-visible {
     outline: 2px solid var(--focus);
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
-
-  .on-dark {
-    --focus: var(--color-primary);
+    outline-offset: 3px;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -71,90 +66,61 @@
 }
 
 @layer components {
-  /* Voz de máquina: etiqueta monoespaciada en mayúsculas. */
+  /* Clases del panel de administración (claro). */
   .label {
-    @apply font-mono text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-slate-600;
+    @apply text-xs font-medium uppercase tracking-[0.08em] text-slate-600;
   }
-  .on-dark .label {
-    @apply text-slate-400;
-  }
-
-  /* La cuadrícula de puntos de orlo.sh. */
-  .dot-grid {
-    background-image: radial-gradient(
-      color-mix(in srgb, var(--color-border-dark) 28%, transparent) 1px,
-      transparent 1.2px
-    );
-    background-size: 22px 22px;
-  }
-  .dot-grid-fade {
-    mask-image: linear-gradient(to bottom, black 35%, transparent);
-  }
-  .on-dark .dot-grid,
-  .dot-grid-dark {
-    background-image: radial-gradient(
-      /* Tailwind slate-400 */
-      color-mix(in srgb, #94a3b8 22%, transparent) 1px,
-      transparent 1.2px
-    );
-    background-size: 22px 22px;
-  }
-
-  /* Subrayador: el verde usado como marcador detrás del texto en carbón. */
-  .mark {
-    background-image: linear-gradient(transparent 58%, var(--color-primary) 58%, var(--color-primary) 92%, transparent 92%);
-    padding-inline: 0.04em;
-  }
-
-  /* El borde vivo: línea fina con un segmento verde donde algo está activo. */
-  .live-edge {
-    position: relative;
-    height: 1px;
-    background: color-mix(in srgb, var(--color-border-dark) 20%, transparent);
-  }
-  .live-edge::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: -1px;
-    height: 3px;
-    width: 5rem;
-    background: var(--color-primary);
-    animation: edge-travel 700ms var(--ease-standard) both;
-  }
-  @keyframes edge-travel {
-    from {
-      transform: translateX(-5rem);
-      opacity: 0;
-    }
-  }
-
-  /* Enlaces: texto en carbón, subrayado verde que se engrosa al pasar el cursor. */
-  .link {
-    @apply text-carbon underline decoration-primary decoration-2 underline-offset-[5px] transition-[text-decoration-thickness] duration-150 hover:decoration-[6px];
-  }
-  .on-dark .link {
-    @apply text-white;
-  }
-
   .panel {
     @apply rounded-md border border-border-dark/15 bg-white;
   }
+  .link {
+    @apply text-carbon underline decoration-border-dark/40 underline-offset-4 hover:decoration-carbon;
+  }
+  .site .link {
+    @apply text-primary decoration-primary/40 hover:decoration-primary;
+  }
 
-  .chip {
-    @apply inline-flex items-center rounded-sm border border-border-dark/15 bg-white px-2 py-0.5 font-mono text-xs text-slate-700;
-  }
-  .on-dark .chip {
-    @apply border-white/15 bg-white/5 text-slate-200;
+  /* Fósforo: el verde brilla un poco, como en un monitor CRT. */
+  .glow {
+    text-shadow: 0 0 12px rgb(13 242 89 / 0.45);
   }
 
-  /* Escala del hero compartida por las palabras y sus anotaciones para que las filas se alineen. */
-  .hero-type {
-    --hero-size: clamp(3.25rem, 9.5vw, 7rem);
-    font-size: var(--hero-size);
-    line-height: 0.95;
+  /* Líneas de barrido muy tenues sobre todo el sitio público. */
+  .site::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgb(255 255 255 / 0.022) 0 1px, transparent 1px 3px);
   }
-  .hero-row {
-    height: calc(var(--hero-size) * 0.95);
+
+  /* Cursor de bloque parpadeante. */
+  .cursor::after {
+    content: "";
+    display: inline-block;
+    width: 0.55em;
+    height: 1em;
+    margin-left: 0.2em;
+    vertical-align: -0.12em;
+    background: var(--color-primary);
+    box-shadow: 0 0 10px rgb(13 242 89 / 0.5);
+    animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cursor::after {
+      animation: none;
+    }
   }
 }
+
+/* Evita el destello claro al rebotar el scroll en las páginas públicas. */
+body:has(> .site) {
+  @apply bg-background-dark;
+}
+

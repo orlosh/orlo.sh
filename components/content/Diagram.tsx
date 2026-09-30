@@ -2,17 +2,16 @@ import type { Diagram as DiagramModel, DiagramNode } from "@/lib/content/types";
 
 /**
  * Diagrama de arquitectura renderizado como SVG inline a partir de un modelo de nodos/aristas
- * (guardado como JSON en la base de datos, validado por diagramSchema).
- * Siempre se dibuja sobre un panel oscuro de «pantalla» (ver DiagramPanel): el camino activo en
- * verde necesita un fondo oscuro para ser legible. Renderizado en servidor, cero JS de cliente.
- * `column` es la posición horizontal y `lane`, la vertical. Los nodos/aristas resaltados usan el
- * color de acento: marcan el camino que realmente sigue una petición.
+ * (guardado como JSON en la base de datos, validado por diagramSchema). Líneas finas sobre el
+ * fondo oscuro; el camino resaltado (el que sigue una petición) va en verde con nodos de filete
+ * blanco. Renderizado en servidor, cero JS de cliente.
+ * `column` es la posición horizontal y `lane`, la vertical.
  */
-const NODE_W = 168;
-const NODE_H = 56;
-const GAP_X = 56;
-const GAP_Y = 36;
-const PAD = 12;
+const NODE_W = 172;
+const NODE_H = 58;
+const GAP_X = 60;
+const GAP_Y = 38;
+const PAD = 14;
 
 function box(n: DiagramNode) {
   const x = PAD + n.column * (NODE_W + GAP_X);
@@ -57,6 +56,12 @@ export function Diagram({
   const hot = new Set(highlight);
   const titleId = `dg-${title.replace(/\W+/g, "-").toLowerCase()}`;
 
+  const edges = model.edges.flatMap((e) => {
+    const a = byId.get(e.from);
+    const b = byId.get(e.to);
+    return a && b ? [{ e, a, b, d: edgePath(a, b), isHot: hot.has(e.from) && hot.has(e.to) }] : [];
+  });
+
   return (
     // Enfocable para que quien use el teclado pueda desplazarlo en horizontal en pantallas pequeñas.
     <figure className="overflow-x-auto" tabIndex={0} aria-label={title}>
@@ -64,7 +69,7 @@ export function Diagram({
         viewBox={`0 0 ${width} ${height}`}
         width={width}
         height={height}
-        className="h-auto max-w-full min-w-[36rem] font-mono"
+        className="h-auto min-w-[38rem] max-w-full font-mono"
         role="img"
         aria-labelledby={`${titleId}-t ${titleId}-d`}
       >
@@ -83,12 +88,7 @@ export function Diagram({
           </marker>
         </defs>
 
-        {model.edges.map((e) => {
-          const a = byId.get(e.from);
-          const b = byId.get(e.to);
-          if (!a || !b) return null;
-          const isHot = hot.has(e.from) && hot.has(e.to);
-          const d = edgePath(a, b);
+        {edges.map(({ e, a, b, d, isHot }) => {
           const A = box(a);
           const B = box(b);
           return (
@@ -97,13 +97,13 @@ export function Diagram({
                 d={d}
                 fill="none"
                 strokeWidth={isHot ? 1.5 : 1}
-                className={isHot ? "stroke-primary" : "stroke-slate-500"}
+                className={isHot ? "stroke-primary" : "stroke-slate-600"}
                 markerEnd={`url(#${titleId}-${isHot ? "arrow-hot" : "arrow"})`}
               />
               {e.label ? (
                 <text
-                  x={a.lane === b.lane ? (A.cx + B.cx) / 2 : (B.x > A.x ? B.x - GAP_X / 2 : B.x + NODE_W + GAP_X / 2) + 5}
-                  y={a.lane === b.lane ? A.cy - 8 : (A.cy + B.cy) / 2 + 3}
+                  x={a.lane === b.lane ? (A.cx + B.cx) / 2 : (B.x > A.x ? B.x - GAP_X / 2 : B.x + NODE_W + GAP_X / 2) + 6}
+                  y={a.lane === b.lane ? A.cy - 10 : (A.cy + B.cy) / 2 + 3}
                   textAnchor={a.lane === b.lane ? "middle" : "start"}
                   className="fill-slate-400 text-[10px]"
                 >
@@ -124,20 +124,20 @@ export function Diagram({
                 y={y}
                 width={NODE_W}
                 height={NODE_H}
-                rx={8}
-                className={`fill-carbon ${isHot ? "stroke-primary" : "stroke-white/20"}`}
+                rx={4}
+                className={isHot ? "fill-carbon stroke-primary" : "fill-background-dark stroke-white/20"}
                 strokeWidth={1}
               />
               <text
                 x={cx}
-                y={n.detail ? y + 23 : y + NODE_H / 2 + 4}
+                y={n.detail ? y + 25 : y + NODE_H / 2 + 4}
                 textAnchor="middle"
-                className="fill-white text-[12px] font-medium"
+                className="fill-white text-[13px]"
               >
                 {n.label}
               </text>
               {n.detail ? (
-                <text x={cx} y={y + 40} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                <text x={cx} y={y + 42} textAnchor="middle" className="fill-slate-400 text-[10px]">
                   {n.detail}
                 </text>
               ) : null}
@@ -146,15 +146,5 @@ export function Diagram({
         })}
       </svg>
     </figure>
-  );
-}
-
-/** El panel oscuro sobre el que se coloca cada diagrama, con su pie. */
-export function DiagramPanel({ children, caption }: { children: React.ReactNode; caption?: React.ReactNode }) {
-  return (
-    <div className="on-dark overflow-hidden rounded-md bg-background-dark text-slate-300 ring-1 ring-white/10">
-      <div className="dot-grid-dark p-4 sm:p-6">{children}</div>
-      {caption ? <div className="border-t border-white/10 px-4 py-3 font-mono text-xs text-slate-400 sm:px-6">{caption}</div> : null}
-    </div>
   );
 }

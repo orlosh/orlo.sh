@@ -1,54 +1,28 @@
 import type { SocialLink } from "@/lib/content/types";
 import { Container } from "./Container";
-import { Wordmark } from "./Wordmark";
 
-export function SiteFooter({
-  brand,
-  links,
-}: {
-  brand: string;
-  links: SocialLink[];
-}) {
+export function SiteFooter({ brand, links }: { brand: string; links: SocialLink[] }) {
+  const items: [string, string, boolean][] = [
+    ...links.map((l) => [l.url, l.label, true] as [string, string, boolean]),
+    ["/notes/rss.xml", "RSS", false],
+    ["/api/v1", "API", false],
+    ["/health", "Estado", false],
+  ];
   return (
-    <footer className="mt-32 overflow-hidden border-t border-carbon">
-      <Container className="grid gap-10 py-12 md:grid-cols-[1fr_auto]">
-        <div className="space-y-3">
-          <p className="label">Build · Deploy · Observe · Secure</p>
-        </div>
-        <ul className="grid grid-cols-2 gap-x-8 gap-y-2 font-mono text-sm sm:grid-cols-3">
-          {links.map((l) => (
-            <li key={l.url}>
-              <a
-                href={l.url}
-                className="link"
-                rel="me noopener noreferrer"
-                target="_blank"
-              >
-                {l.label.toLowerCase()}
-              </a>
-            </li>
-          ))}
-          {[
-            ["/health", "/health"],
-            ["/api/v1", "/api/v1"],
-            ["/notes/rss.xml", "rss"],
-            ["/sitemap.xml", "sitemap"],
-          ].map(([href, label]) => (
+    <footer className="mt-24 border-t border-primary/15">
+      <Container className="flex flex-col gap-4 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          © {new Date().getUTCFullYear()} {brand}
+        </p>
+        <ul className="flex flex-wrap gap-x-5 gap-y-2">
+          {items.map(([href, label, external]) => (
             <li key={href}>
-              <a href={href} className="link">
+              <a href={href} className="hover:text-white" {...(external ? { target: "_blank", rel: "me noopener noreferrer" } : {})}>
                 {label}
               </a>
             </li>
           ))}
         </ul>
-      </Container>
-      <Container>
-        <p
-          aria-hidden
-          className="select-none border-t-4 border-primary pb-4 pt-2 text-[clamp(4rem,19vw,15.5rem)] leading-[0.9] text-carbon"
-        >
-          <Wordmark brand={brand} mark={false} />
-        </p>
       </Container>
     </footer>
   );

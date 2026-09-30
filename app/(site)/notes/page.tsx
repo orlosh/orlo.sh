@@ -7,8 +7,7 @@ import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Notas técnicas",
-  description:
-    "Notas técnicas: arquitectura, troubleshooting, despliegue y seguridad.",
+  description: "Notas técnicas: arquitectura, troubleshooting, despliegue y seguridad.",
   alternates: {
     canonical: "/notes",
     types: { "application/rss+xml": "/notes/rss.xml" },
@@ -19,48 +18,26 @@ export default async function NotesPage() {
   const notes = await getNotes();
   return (
     <>
-      <PageHeader
-        label="technical notes"
-        title="Notas técnicas"
-        intro="Troubleshooting, decisiones y lo aprendido construyendo sistemas"
-      />
-      <Container className="py-14">
+      <PageHeader title="Notas" intro="Troubleshooting, decisiones y lo aprendido construyendo sistemas." />
+      <Container>
         {notes.length ? (
-          <ul className="divide-y divide-border-dark/15 border-y border-carbon">
+          <ul className="divide-y divide-white/10 border-y border-white/10">
             {notes.map((n) => (
-              <li key={n.slug}>
-                <Link
-                  href={`/notes/${n.slug}`}
-                  className="group grid gap-2 py-7 md:grid-cols-[10rem_1fr]"
-                >
-                  <span className="font-mono text-xs text-slate-600 md:pt-2">
-                    {formatDate(n.publishedAt)}
-                  </span>
-                  <span>
-                    <span className="block text-2xl font-semibold tracking-[-0.03em] text-carbon group-hover:underline group-hover:decoration-primary group-hover:decoration-2 group-hover:underline-offset-4">
-                      {n.title}
-                    </span>
-                    <span className="mt-2 block max-w-2xl text-slate-700">
-                      {n.excerpt}
-                    </span>
-                    {n.tags.length ? (
-                      <span className="mt-3 flex flex-wrap gap-1.5">
-                        {n.tags.map((t) => (
-                          <span key={t.slug} className="chip">
-                            #{t.slug}
-                          </span>
-                        ))}
-                      </span>
-                    ) : null}
-                  </span>
-                </Link>
+              <li key={n.slug} className="py-6">
+                <time dateTime={n.publishedAt} className="text-sm text-slate-400">
+                  {formatDate(n.publishedAt)}
+                </time>
+                <h2 className="mt-1 text-xl font-bold text-white">
+                  <Link href={`/notes/${n.slug}`} className="hover:text-primary">
+                    {n.title}
+                  </Link>
+                </h2>
+                <p className="mt-2 max-w-2xl leading-relaxed text-slate-400">{n.excerpt}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="rounded-md border border-dashed border-border-dark/30 bg-white px-6 py-10 text-slate-700">
-            Todavía no hay notas publicadas.
-          </p>
+          <p className="text-slate-400">Todavía no hay notas publicadas.</p>
         )}
       </Container>
     </>

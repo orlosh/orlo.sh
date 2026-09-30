@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "@/lib/site";
 
-/** El único JS de cliente en la cabecera pública: marca la sección actual. */
+/** Marca la sección actual. */
 export function NavLinks() {
   const pathname = usePathname();
   return (
-    <ul className="flex items-center gap-1 font-mono text-[0.8125rem]">
+    <ul className="flex flex-wrap items-center gap-x-6 gap-y-1">
       {NAV.map(({ href, label }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
@@ -16,9 +16,7 @@ export function NavLinks() {
             <Link
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`block whitespace-nowrap rounded-sm px-2 py-1 transition-colors duration-150 ${
-                active ? "bg-primary text-carbon" : "text-slate-600 hover:bg-white hover:text-carbon"
-              }`}
+              className={active ? "glow text-primary" : "text-slate-400 hover:text-white"}
             >
               {label}
             </Link>

@@ -1,28 +1,27 @@
 import { Container } from "@/components/site/Container";
 
-/** Banda de apertura para páginas interiores: cuadrícula de puntos, etiqueta, título grande, intro opcional. */
+/** Cabecera de las páginas interiores. */
 export function PageHeader({
   label,
   title,
   intro,
   children,
 }: {
-  label: string;
+  label?: React.ReactNode;
   title: string;
   intro?: string;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="relative border-b border-border-dark/15">
-      <div aria-hidden className="dot-grid dot-grid-fade absolute inset-0" />
-      <Container className="relative pb-14 pt-16 md:pt-24">
-        <p className="label">{label}</p>
-        <h1 className="mt-4 max-w-4xl text-[clamp(2.75rem,7vw,5.5rem)] font-semibold leading-[0.98] tracking-[-0.045em] text-carbon">
+    <header>
+      <Container className="pb-10 pt-14 md:pt-20">
+        {label ? <div className="mb-4 text-sm text-slate-400">{label}</div> : null}
+        <h1 className="text-[clamp(2.25rem,5vw,3.25rem)] font-bold leading-tight text-white [overflow-wrap:anywhere]">
           {title}
         </h1>
-        {intro ? <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-700">{intro}</p> : null}
+        {intro ? <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">{intro}</p> : null}
         {children}
       </Container>
-    </div>
+    </header>
   );
 }

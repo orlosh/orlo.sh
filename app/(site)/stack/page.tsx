@@ -6,8 +6,7 @@ import { getStack } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Stack",
-  description:
-    "Tecnologías organizadas por capa, enlazadas a los proyectos donde se usan.",
+  description: "Tecnologías organizadas por capa, enlazadas a los proyectos donde se usan.",
   alternates: { canonical: "/stack" },
 };
 
@@ -15,12 +14,8 @@ export default async function StackPage() {
   const stack = await getStack();
   return (
     <>
-      <PageHeader
-        label="stack"
-        title="Tecnologías por capa"
-        intro="Las tecnologías detrás de los proyectos que construyo"
-      />
-      <Container className="py-14">
+      <PageHeader title="Stack" intro="Las tecnologías con las que trabajo, por capas y enlazadas a los proyectos donde las he usado." />
+      <Container>
         <StackLayers layers={stack} detailed />
       </Container>
     </>

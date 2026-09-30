@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Diagram, DiagramPanel } from "@/components/content/Diagram";
+import { Diagram } from "@/components/content/Diagram";
 import { Markdown } from "@/components/content/Markdown";
-import { ProjectStatusPill } from "@/components/content/StatusPill";
-import { TechList } from "@/components/content/TechList";
+import { PageHeader } from "@/components/content/PageHeader";
+import { ProjectStatusMark } from "@/components/content/StatusPill";
 import { Container } from "@/components/site/Container";
 import { getProject } from "@/lib/content";
-import {
-  CASE_STUDY_SECTIONS,
-  type CaseStudySection,
-} from "@/lib/content/types";
+import { CASE_STUDY_SECTIONS, type CaseStudySection } from "@/lib/content/types";
 import { slugSchema } from "@/lib/validation/content";
 
 const SECTION_TITLES: Record<CaseStudySection, string> = {
-  overview: "Overview",
+  overview: "Resumen",
   architecture: "Arquitectura",
   infrastructure: "Infraestructura",
   deployment: "Despliegue",
@@ -41,11 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: project.title,
     description: project.summary,
     alternates: { canonical: `/projects/${project.slug}` },
-    openGraph: {
-      type: "article",
-      title: project.title,
-      description: project.summary,
-    },
+    openGraph: { type: "article", title: project.title, description: project.summary },
   };
 }
 
@@ -53,135 +46,78 @@ export default async function ProjectPage({ params }: Props) {
   const project = await load(params);
   if (!project) notFound();
 
-  const sections = CASE_STUDY_SECTIONS.filter((key) =>
-    project.sections[key]?.trim(),
-  );
+  const sections = CASE_STUDY_SECTIONS.filter((key) => project.sections[key]?.trim());
+  const facts: [string, React.ReactNode][] = [
+    ["Estado", project.status ? <ProjectStatusMark status={project.status} /> : "Sin indicar"],
+    ["Tecnología", project.technologies.length ? project.technologies.map((t) => t.name).join(", ") : "Sin documentar"],
+  ];
 
   return (
     <article>
-      <div className="relative border-b border-border-dark/15">
-        <div aria-hidden className="dot-grid dot-grid-fade absolute inset-0" />
-        <Container className="relative pb-12 pt-12 md:pt-16">
-          <nav aria-label="Migas" className="font-mono text-xs text-slate-600">
-            <Link href="/projects" className="link">
-              proyectos
-            </Link>{" "}
-            / {project.slug}
-          </nav>
-          <h1 className="mt-8 max-w-4xl text-[clamp(2.75rem,7vw,5.5rem)] font-semibold leading-[0.98] tracking-[-0.045em] text-carbon">
-            {project.title}
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-700">
-            {project.summary}
-          </p>
+      <PageHeader
+        label={
+          <Link href="/projects" className="link">
+            ← Proyectos
+          </Link>
+        }
+        title={project.title}
+        intro={project.summary}
+      >
+        <dl className="mt-8 grid gap-6 border border-primary/15 bg-carbon p-5 text-sm sm:grid-cols-3">
+          {facts.map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-slate-400">{k}</dt>
+              <dd className="mt-1 text-slate-200">{v}</dd>
+            </div>
+          ))}
+          <div>
+            <dt className="text-slate-400">Enlaces</dt>
+            <dd className="mt-1 flex flex-col items-start gap-1">
+              {project.repositoryUrl ? (
+                <a href={project.repositoryUrl} className="link" target="_blank" rel="noopener noreferrer">
+                  Repositorio ↗
+                </a>
+              ) : null}
+              {project.liveUrl ? (
+                <a href={project.liveUrl} className="link" target="_blank" rel="noopener noreferrer">
+                  En producción ↗
+                </a>
+              ) : null}
+              {!project.repositoryUrl && !project.liveUrl ? <span className="text-slate-200">No publicado</span> : null}
+            </dd>
+          </div>
+        </dl>
+      </PageHeader>
 
-          {/* Tarjeta de señales: los datos que un lector necesita antes de decidir seguir leyendo. */}
-          <dl className="mt-10 grid overflow-hidden rounded-md border border-carbon bg-white sm:grid-cols-2 lg:grid-cols-[auto_1fr_auto]">
-            <div className="border-b border-border-dark/15 p-5 sm:border-r lg:border-b-0">
-              <dt className="label">Estado</dt>
-              <dd className="mt-2">
-                {project.status ? (
-                  <ProjectStatusPill status={project.status} />
-                ) : (
-                  <span className="text-slate-600">sin indicar</span>
-                )}
-              </dd>
-            </div>
-            <div className="border-b border-border-dark/15 p-5 lg:border-b-0 lg:border-r">
-              <dt className="label">Tecnología</dt>
-              <dd className="mt-2">
-                {project.technologies.length ? (
-                  <TechList items={project.technologies} />
-                ) : (
-                  <span className="text-slate-600">sin documentar</span>
-                )}
-              </dd>
-            </div>
-            <div className="p-5 sm:col-span-2 lg:col-span-1">
-              <dt className="label">Enlaces</dt>
-              <dd className="mt-2 flex flex-col gap-1 font-mono text-sm">
-                {project.repositoryUrl ? (
-                  <a
-                    href={project.repositoryUrl}
-                    className="link w-fit"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    repositorio ↗
-                  </a>
-                ) : null}
-                {project.liveUrl ? (
-                  <a
-                    href={project.liveUrl}
-                    className="link w-fit"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    en producción ↗
-                  </a>
-                ) : null}
-                {!project.repositoryUrl && !project.liveUrl ? (
-                  <span className="text-slate-600">no publicado</span>
-                ) : null}
-              </dd>
-            </div>
-          </dl>
-        </Container>
-      </div>
-
-      <Container className="grid gap-12 py-14 lg:grid-cols-[13rem_1fr]">
+      <Container className="grid gap-10 py-6 md:grid-cols-12">
         {sections.length > 1 ? (
-          <nav
-            aria-label="Secciones del caso de estudio"
-            className="hidden lg:block"
-          >
-            <ol className="sticky top-24 space-y-1 border-l border-border-dark/20 font-mono text-xs">
-              {sections.map((key, i) => (
+          <nav aria-label="Secciones del caso de estudio" className="hidden md:col-span-3 md:block">
+            <ol className="sticky top-8 space-y-2 text-sm">
+              {sections.map((key) => (
                 <li key={key}>
-                  <a
-                    href={`#${key}`}
-                    className="-ml-px block border-l-2 border-transparent py-1 pl-3 text-slate-600 hover:border-primary hover:text-carbon"
-                  >
-                    {String(i + 1).padStart(2, "0")} {SECTION_TITLES[key]}
+                  <a href={`#${key}`} className="text-slate-400 hover:text-white">
+                    {SECTION_TITLES[key]}
                   </a>
                 </li>
               ))}
             </ol>
           </nav>
-        ) : (
-          <div className="hidden lg:block" />
-        )}
+        ) : null}
 
-        <div className="min-w-0 space-y-16">
-          {sections.map((key, i) => (
+        <div className="min-w-0 md:col-span-9 md:col-start-4">
+          {sections.map((key) => (
             <section
               key={key}
               id={key}
               aria-labelledby={`${key}-h`}
-              className="scroll-mt-24"
+              className="scroll-mt-8 border-t border-white/10 py-10 first:border-t-0 first:pt-0"
             >
-              <div className="border-t border-carbon pt-4">
-                <p className="label">
-                  <span className="text-carbon">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>{" "}
-                  / {key}
-                </p>
-                <h2
-                  id={`${key}-h`}
-                  className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-carbon"
-                >
-                  {SECTION_TITLES[key]}
-                </h2>
-              </div>
+              <h2 id={`${key}-h`} className="text-2xl font-bold tracking-tight text-white">
+                {SECTION_TITLES[key]}
+              </h2>
               {key === "architecture" && project.diagram ? (
-                <div className="mt-6">
-                  <DiagramPanel>
-                    <Diagram
-                      model={project.diagram}
-                      title={`Arquitectura de ${project.title}`}
-                    />
-                  </DiagramPanel>
+                <div className="mt-6 border border-primary/15 bg-carbon p-4">
+                  <Diagram model={project.diagram} title={`Arquitectura de ${project.title}`} />
                 </div>
               ) : null}
               <div className="mt-6 max-w-[68ch]">
@@ -191,28 +127,16 @@ export default async function ProjectPage({ params }: Props) {
           ))}
 
           {project.images.length ? (
-            <section aria-labelledby="images-h">
-              <h2
-                id="images-h"
-                className="border-t border-carbon pt-4 text-3xl font-semibold tracking-[-0.03em] text-carbon"
-              >
+            <section aria-labelledby="images-h" className="border-t border-white/10 py-10">
+              <h2 id="images-h" className="text-2xl font-bold tracking-tight text-white">
                 Capturas
               </h2>
-              <div className="mt-6 space-y-8">
+              <div className="mt-8 space-y-10">
                 {project.images.map((img) => (
                   <figure key={img.url}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.url}
-                      alt={img.alt}
-                      loading="lazy"
-                      className="rounded-md border border-border-dark/15"
-                    />
-                    {img.caption ? (
-                      <figcaption className="mt-2 text-sm text-slate-600">
-                        {img.caption}
-                      </figcaption>
-                    ) : null}
+                    <img src={img.url} alt={img.alt} loading="lazy" className="rounded-md border border-white/10" />
+                    {img.caption ? <figcaption className="mt-3 text-sm text-slate-400">{img.caption}</figcaption> : null}
                   </figure>
                 ))}
               </div>

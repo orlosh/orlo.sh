@@ -6,8 +6,7 @@ import { getProjects } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Proyectos",
-  description:
-    "Sistemas y proyectos: arquitectura, infraestructura, despliegue y seguridad.",
+  description: "Sistemas y proyectos: arquitectura, infraestructura, despliegue y seguridad.",
   alternates: { canonical: "/projects" },
 };
 
@@ -15,20 +14,16 @@ export default async function ProjectsPage() {
   const projects = await getProjects();
   return (
     <>
-      <PageHeader
-        label="selected systems"
-        title="Proyectos"
-        intro="Algunos de los proyectos que he creado"
-      />
-      <Container className="py-14">
+      <PageHeader title="Proyectos" intro="Lo que he construido. Cada proyecto tiene su caso de estudio." />
+      <Container>
         {projects.length ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map((p, i) => (
-              <ProjectCard key={p.slug} project={p} index={i} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {projects.map((p) => (
+              <ProjectCard key={p.slug} project={p} headingLevel={2} />
             ))}
           </div>
         ) : (
-          <p className="text-slate-700">Aún no hay proyectos publicados.</p>
+          <p className="text-slate-400">Aún no hay proyectos publicados.</p>
         )}
       </Container>
     </>

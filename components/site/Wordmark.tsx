@@ -1,12 +1,12 @@
-/** "orlo.sh": el borde vivo (un bloque verde) aplicado al propio nombre. */
-export function Wordmark({ brand, className = "", mark = true }: { brand: string; className?: string; mark?: boolean }) {
+/** "orlo.sh" con el punto en verde. */
+export function Wordmark({ brand }: { brand: string }) {
   const dot = brand.lastIndexOf(".");
-  const [name, tld] = dot > 0 ? [brand.slice(0, dot), brand.slice(dot)] : [brand, ""];
+  if (dot <= 0) return <>{brand}</>;
   return (
-    <span className={`inline-flex items-baseline font-semibold tracking-[-0.04em] ${className}`}>
-      {mark ? <span aria-hidden className="mr-[0.28em] inline-block size-[0.42em] translate-y-[-0.05em] rounded-[2px] bg-primary" /> : null}
-      <span>{name}</span>
-      {tld ? <span className="text-slate-600">{tld}</span> : null}
-    </span>
+    <>
+      {brand.slice(0, dot)}
+      <span className="text-primary">.</span>
+      {brand.slice(dot + 1)}
+    </>
   );
 }

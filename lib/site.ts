@@ -7,9 +7,9 @@ export function siteUrl(): string {
 export const DEFAULT_BRAND = "orlo.sh";
 
 export const NAV = [
-  { href: "/projects", label: "proyectos" },
-  { href: "/stack", label: "stack" },
-  { href: "/experience", label: "experiencia" },
-  { href: "/notes", label: "notas" },
-  { href: "/engineering", label: "ingeniería" },
+  { href: "/projects", label: "Proyectos" },
+  { href: "/stack", label: "Stack" },
+  { href: "/experience", label: "Experiencia" },
+  { href: "/notes", label: "Notas" },
+  { href: "/engineering", label: "Ingeniería" },
 ] as const;
