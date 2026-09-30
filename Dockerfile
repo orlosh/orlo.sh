@@ -36,6 +36,7 @@ COPY package.json tsconfig.json drizzle.config.ts ./
 COPY db ./db
 COPY scripts ./scripts
 COPY lib/architecture.ts ./lib/architecture.ts
+COPY lib/db-target.ts ./lib/db-target.ts
 COPY lib/content/types.ts ./lib/content/types.ts
 COPY lib/validation/content.ts ./lib/validation/content.ts
 USER node
