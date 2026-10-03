@@ -127,7 +127,7 @@ aprobación antes de cada despliegue).
 | secret | `VERCEL_PROJECT_ID` | `projectId` de `.vercel/project.json` |
 | secret | `NEON_MIGRATION_URL` | `NEON_OWNER_URL` (directa, rol propietario) |
 | variable | `APP_URL` | la misma URL que `APP_URL` en Vercel |
-| variable | `DEPLOY_ENABLED` | `true` (mientras no exista, el job de despliegue se salta) |
+| variable | `DEPLOY_ENABLED` | `true` (mientras no exista, el job de despliegue se salta). **Variable de repositorio** (Settings → Secrets and variables → Actions → Variables), no del environment: el `if` del job se evalúa antes de entrar en el environment y no ve sus variables |
 
 Qué hace el job `deploy` de [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) en cada push
 a `main` que pasa todo lo anterior:
