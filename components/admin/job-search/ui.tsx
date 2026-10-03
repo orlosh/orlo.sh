@@ -178,3 +178,16 @@ export function PlainText({ children }: { children: string | null | undefined })
   if (!children?.trim()) return <p className="text-sm text-slate-500">—</p>;
   return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">{children}</p>;
 }
+
+/** Aviso cuando una función de IA no está disponible porque la IA está desactivada. */
+export function AiOff({ what }: { what: string }) {
+  return (
+    <p className="text-xs text-slate-600">
+      {what}: activa la IA en{" "}
+      <Link href="/admin/job-search/settings/ai" className="link">
+        Ajustes → Inteligencia artificial
+      </Link>
+      .
+    </p>
+  );
+}

@@ -230,6 +230,15 @@ site or the API.
 - **Job Description analysis and CV matching** are local and deterministic (`lib/job-search/jd.ts`):
   no text is sent to any external service. Matches are backed by real evidence (stack, experience,
   projects, stored CV text); anything without evidence is reported as a gap, never filled in.
+- **AI (Gemini)**, configured entirely from *Ajustes → Inteligencia artificial* (no feature flags in
+  env vars): import a job from its URL (server-side fetch with SSRF protection + JSON-LD + Gemini with
+  URL context and Google Search) into validated JSON; CV fit with literal quotes that the server
+  verifies against the CV; cover letters whose claims are checked the same way; company research
+  with real grounding sources; interview prep and answer rehearsal; message drafts; a weekly coach;
+  and a daily **job radar** (Vercel Cron) that searches, verifies each link exists, scores the fit and
+  adds ≥ 80 % matches to the inbox. Any number of API keys, encrypted at rest (AES-256-GCM derived
+  from `BETTER_AUTH_SECRET`), tried in order with per-key cool-downs on 429/invalid key/5xx. Free-tier
+  limits are per Google Cloud project, so each key should come from a different project.
 - **Insights** only come from recorded data; below a minimum sample (5) the UI says
   *Insufficient data*. Calendar integration is a Google Calendar link and an `.ics` download per
   interview; email is a `mailto:` follow-up. No OAuth or inbox access.

@@ -1,5 +1,6 @@
 import { ActionForm } from "@/components/admin/ActionForm";
 import { Select, TextField } from "@/components/admin/fields";
+import { SettingsNav } from "@/components/admin/job-search/SettingsNav";
 import { PageHeader } from "@/components/admin/job-search/ui";
 import { saveGoalAction } from "@/lib/job-search/actions";
 import { OPTIONS, WORKPLACE_LABEL } from "@/lib/job-search/labels";
@@ -13,6 +14,7 @@ export default async function SettingsPage() {
   const { row, goal } = await getGoal(db);
   return (
     <div className="max-w-4xl space-y-8">
+      <SettingsNav current="goal" />
       <PageHeader title="Objetivo y reglas" description="El objetivo fija el contador de días. Las preferencias alimentan la puntuación de cada oferta y las reglas fijan cuándo se crean los seguimientos automáticos." />
       {!row ? <p className="text-sm text-slate-600">Aún no has guardado el objetivo: se usan los valores por defecto con inicio hoy.</p> : null}
       <ActionForm action={saveGoalAction} className="space-y-8">

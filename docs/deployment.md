@@ -206,4 +206,5 @@ menos una vez en una rama de Neon.
 | Cambiar la contraseña del admin | `DATABASE_URL="$NEON_APP_URL" ADMIN_EMAIL=<email> pnpm admin:create` |
 | Rotar `BETTER_AUTH_SECRET` | cambiarlo en Vercel y redesplegar (cierra todas las sesiones) |
 | Rotar la contraseña de `portfolio_app` | `ALTER ROLE portfolio_app PASSWORD '…'` como propietario, y actualizar `DATABASE_URL` en Vercel |
+| Activar el radar automático de ofertas | Vercel → Settings → Environment Variables → `CRON_SECRET` (Production) con un valor aleatorio de 32+ caracteres y redesplegar. Vercel llama a `/api/cron/job-radar` una vez al día; la frecuencia real, las búsquedas y el umbral se configuran en *Ajustes → Inteligencia artificial*. Las claves de Gemini se añaden también desde el panel |
 | Añadir una migración | `pnpm db:generate` en local, revisar el SQL, commit: el pipeline la aplica antes de desplegar |

@@ -2,6 +2,9 @@ import { JobSearchNav } from "@/components/admin/job-search/JobSearchNav";
 import { QuickAdd } from "@/components/admin/job-search/QuickAdd";
 import { getOptions, getSnapshot } from "@/lib/job-search/server";
 
+// Las acciones de IA (importar, investigar, radar) pueden tardar: margen hasta el límite de la función.
+export const maxDuration = 300;
+
 export const metadata = { title: { default: "Búsqueda de empleo · Admin", template: "%s · Búsqueda de empleo · Admin" } };
 
 export default async function JobSearchLayout({ children }: { children: React.ReactNode }) {

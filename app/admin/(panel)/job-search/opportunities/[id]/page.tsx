@@ -5,6 +5,8 @@ import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Select, TextArea, TextField } from "@/components/admin/fields";
 import { ActionButton } from "@/components/admin/job-search/ActionButton";
 import { Notes, TaskFields, TaskList, Timeline } from "@/components/admin/job-search/lists";
+import { AiButton, DraftMessage } from "@/components/admin/job-search/ai";
+import { AiAnalysisCard, AiMatchCard } from "@/components/admin/job-search/AiResults";
 import { OpportunityForm } from "@/components/admin/job-search/OpportunityForm";
 import { StatusSelect } from "@/components/admin/job-search/StatusSelect";
 import { Badge, Empty, Muted, PlainText, PriorityTag, Section, Table, Tabs, td } from "@/components/admin/job-search/ui";
@@ -20,6 +22,12 @@ import {
   unlinkDocumentAction,
   updateReferralAction,
 } from "@/lib/job-search/actions";
+import { eq } from "drizzle-orm";
+import { jobDocuments } from "@/db/schema";
+import { coverLetterAction, draftMessageAction, matchAction, reanalyzeAction } from "@/lib/ai/actions";
+import { MESSAGE_KINDS, type VerifiedMatch } from "@/lib/ai/features";
+import type { JobExtraction } from "@/lib/ai/schemas";
+import { getAiSettings } from "@/lib/ai/store";
 import { googleCalendarUrl, mailto } from "@/lib/job-search/calendar";
 import { daysBetween, formatDateTime, formatDay, relativeDay } from "@/lib/job-search/dates";
 import { analyzeOpportunity } from "@/lib/job-search/engine";
@@ -102,13 +110,15 @@ export default async function OpportunityPage({ params, searchParams }: { params
     );
   }
 
-  const [opp, { snapshot: s, engine, profile }, options, companies, docOptions, cvDocs] = await Promise.all([
+  const [opp, { snapshot: s, engine, profile }, options, companies, docOptions, cvDocs, ai, drafts] = await Promise.all([
     repo.getOpportunity(db, id),
     getWorkspace(),
     getOptions(),
     repo.listCompanyNames(db),
     repo.listDocumentOptions(db),
     repo.listCvDocuments(db),
+    getAiSettings(db),
+    db.query.jobDocuments.findMany({ where: eq(jobDocuments.opportunityId, id), orderBy: (d, { desc }) => [desc(d.createdAt)] }),
   ]);
   if (!opp) notFound();
 
@@ -129,6 +139,9 @@ export default async function OpportunityPage({ params, searchParams }: { params
   };
 
   const transitions = quickTransitions(opp.status);
+  const aiOff = ai.enabled ? undefined : "Activa la IA en Ajustes → Inteligencia artificial";
+  const aiAnalysis = opp.aiAnalysis as (JobExtraction & { sources?: { uri: string; title: string | null }[]; model?: string; at?: string }) | null;
+  const aiMatch = opp.aiMatch as VerifiedMatch | null;
   const nextTasks = opp.tasks.filter((t) => t.status === "open").slice(0, 4);
   const facts: [string, string][] = [
     ["Fuente", SOURCE_LABEL[opp.source]],
@@ -177,10 +190,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
               ) : null}
             </p>
           </div>
+          <div className="flex shrink-0 flex-col items-end gap-2">
           <Link href={`${base}?tab=overview#puntuacion`} className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-right hover:border-slate-300">
             <span className="block font-mono text-2xl text-carbon">{score?.score ?? "—"}</span>
             <span className="block text-[0.7rem] text-slate-500">{score?.overridden ? `manual · calculada ${score.computed}` : "puntuación"}</span>
+            {aiMatch ? <span className="block text-[0.7rem] text-slate-500">encaje IA {aiMatch.score}%</span> : null}
           </Link>
+          <AiButton action={reanalyzeAction} hidden={{ id }} label={aiAnalysis ? "Volver a analizar" : "Analizar con IA"} pendingLabel="Analizando…" disabled={aiOff ?? (!opp.url && !opp.description ? "Añade la URL o la descripción" : undefined)} />
+          </div>
         </div>
 
         {/* Estado y siguientes pasos: lo que más se toca, siempre a mano (también en el móvil). */}
@@ -206,6 +223,11 @@ export default async function OpportunityPage({ params, searchParams }: { params
       {tab === "overview" ? (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-8">
+            {aiAnalysis ? (
+              <Section title="Resumen de la oferta">
+                <AiAnalysisCard analysis={aiAnalysis} />
+              </Section>
+            ) : null}
             <Section title="Datos">
               <dl className="panel grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm">
                 {facts.map(([k, v]) => (
@@ -267,6 +289,20 @@ export default async function OpportunityPage({ params, searchParams }: { params
         </div>
       ) : null}
 
+      {tab === "match" ? (
+        <Section
+          title="Encaje con tu CV (IA)"
+          action={<AiButton action={matchAction} hidden={{ id }} label={aiMatch ? "Recalcular" : "Calcular encaje"} pendingLabel="Comparando con tu CV…" disabled={aiOff} />}
+        >
+          {aiMatch ? (
+            <AiMatchCard match={aiMatch} company={opp.company?.name} />
+          ) : (
+            <Empty>Gemini compara la oferta con tu CV y solo da por buenos los puntos fuertes que puede citar literalmente de él.</Empty>
+          )}
+          <h3 className="label pt-4">Análisis local (sin IA)</h3>
+        </Section>
+      ) : null}
+
       {tab === "jd" || tab === "match" ? <AnalysisTabs tab={tab} opp={opp} profile={profile} today={s.today} cvDocs={cvDocs} cvParam={sp.cv} base={base} /> : null}
 
       {tab === "contacts" ? (
@@ -323,6 +359,15 @@ export default async function OpportunityPage({ params, searchParams }: { params
             </details>
           </Section>
 
+          <Section title="Redactar un mensaje (IA)">
+            {ai.enabled ? (
+              <div className="panel p-4">
+                <DraftMessage action={draftMessageAction} kinds={MESSAGE_KINDS} opportunityId={id} defaultKind="referral_request" />
+              </div>
+            ) : (
+              <p className="text-sm text-slate-600">{aiOff}.</p>
+            )}
+          </Section>
           <Section title="Recomendaciones">
             {opp.referrals.length ? (
               <ul className="panel divide-y divide-slate-200">
@@ -382,6 +427,42 @@ export default async function OpportunityPage({ params, searchParams }: { params
 
       {tab === "documents" ? (
         <div className="space-y-6">
+          <Section title="Carta de presentación con IA">
+            {ai.enabled ? (
+              <ActionForm action={coverLetterAction} hidden={{ opportunityId: id }} submitLabel="Generar carta" pendingLabel="Escribiendo la carta…" className="panel grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+                <Select name="language" label="Idioma" options={[{ value: "es", label: "Castellano" }, { value: "en", label: "Inglés" }]} defaultValue="es" />
+                <Select name="tone" label="Tono" options={[{ value: "cercano", label: "Cercano" }, { value: "formal", label: "Formal" }, { value: "directo", label: "Directo" }]} defaultValue="cercano" />
+                <Select name="length" label="Extensión" options={[{ value: "corta", label: "Corta (≈200 palabras)" }, { value: "media", label: "Media (≈300 palabras)" }]} defaultValue="corta" />
+                <div className="sm:col-span-3">
+                  <TextField name="notes" label="Indicaciones (opcional)" placeholder="Menciona que conozco su producto, que puedo empezar en…" />
+                </div>
+              </ActionForm>
+            ) : (
+              <p className="text-sm text-slate-600">{aiOff}.</p>
+            )}
+            {drafts.length ? (
+              <ul className="space-y-3">
+                {drafts.map((d) => (
+                  <li key={d.id} className="panel p-4">
+                    <details>
+                      <summary className="cursor-pointer text-sm text-carbon">
+                        {d.name} <span className="font-mono text-xs text-slate-500">{d.version}</span>
+                      </summary>
+                      <PlainText>{d.content}</PlainText>
+                      {d.notes ? <p className="mt-3 whitespace-pre-wrap text-xs text-slate-600">{d.notes}</p> : null}
+                      <p className="mt-3 text-xs text-slate-600">
+                        Edítala en{" "}
+                        <Link href="/admin/job-search/documents" className="link">
+                          Documentos
+                        </Link>{" "}
+                        y regístrala abajo cuando la envíes.
+                      </p>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Section>
           {opp.documents.length ? (
             <Table head={["Documento", "Tipo", "Versión", "Usado", ""]}>
               {opp.documents.map(({ document: d, usedAt }) => (

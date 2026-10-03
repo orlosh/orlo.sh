@@ -2,6 +2,9 @@ import Link from "next/link";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { TextArea } from "@/components/admin/fields";
 import { Empty, PageHeader, Section, Table, td } from "@/components/admin/job-search/ui";
+import { CoachPanel } from "@/components/admin/job-search/ai";
+import { coachAction } from "@/lib/ai/actions";
+import { getAiSettings } from "@/lib/ai/store";
 import { saveWeeklyReviewAction } from "@/lib/job-search/actions";
 import { bottleneck, insights, pct, WEEK_METRIC_LABEL, weekMetrics, type WeekMetrics } from "@/lib/job-search/analytics";
 import { addDays, formatDay, weekStart } from "@/lib/job-search/dates";
@@ -14,7 +17,7 @@ export const metadata = { title: "Revisión semanal" };
 
 export default async function WeeklyReviewPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
   const sp = await searchParams;
-  const [{ snapshot: s, engine }, saved] = await Promise.all([getWorkspace(), listWeeklyReviews(db)]);
+  const [{ snapshot: s, engine }, saved, ai] = await Promise.all([getWorkspace(), listWeeklyReviews(db), getAiSettings(db)]);
   const current = weekStart(s.today);
   const week = sp.week && /^\d{4}-\d{2}-\d{2}$/.test(sp.week) ? weekStart(sp.week) : current;
   const prevWeek = addDays(week, -7);
@@ -116,6 +119,12 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
           </Section>
         </div>
       </div>
+
+      {ai.enabled ? (
+        <Section title="Coach (IA)">
+          <CoachPanel action={coachAction} weekStart={week} />
+        </Section>
+      ) : null}
 
       <Section title="Acciones recomendadas">
         <ol className="panel list-decimal space-y-2 py-4 pl-10 pr-4 text-sm text-slate-800">

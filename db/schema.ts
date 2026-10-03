@@ -445,6 +445,9 @@ export const jobCompanies = pgTable(
     nextAction: text("next_action"),
     nextActionAt: date("next_action_at", { mode: "string" }),
     archived: boolean("archived").notNull().default(false),
+    /** Investigación de la empresa hecha con Gemini + Google Search (ver lib/ai). */
+    aiResearch: jsonb("ai_research"),
+    aiResearchAt: timestamp("ai_research_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
@@ -497,6 +500,12 @@ export const jobOpportunities = pgTable(
     notes: text("notes"),
     /** Desnormalizado: lo actualiza cada actividad, para detectar oportunidades que se enfrían. */
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Datos extraídos de la oferta por Gemini (JSON validado, ver lib/ai/schemas.ts). */
+    aiAnalysis: jsonb("ai_analysis"),
+    aiAnalyzedAt: timestamp("ai_analyzed_at", { withTimezone: true }),
+    /** Encaje con el CV calculado por Gemini, con las citas del CV ya verificadas. */
+    aiMatch: jsonb("ai_match"),
+    aiMatchAt: timestamp("ai_match_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
@@ -711,9 +720,12 @@ export const jobDocuments = pgTable(
     content: text("content"),
     notes: text("notes"),
     archived: boolean("archived").notNull().default(false),
+    /** Borrador generado para una oportunidad concreta (p. ej., una carta de presentación). */
+    opportunityId: uuid("opportunity_id").references(() => jobOpportunities.id, { onDelete: "set null" }),
+    generated: boolean("generated").notNull().default(false),
     ...timestamps,
   },
-  (t) => [check("job_documents_url_https", HTTPS_OR_NULL(t.url))],
+  (t) => [check("job_documents_url_https", HTTPS_OR_NULL(t.url)), index("job_documents_opportunity_idx").on(t.opportunityId)],
 );
 
 /** Qué versión de cada documento se envió en cada candidatura. */
@@ -763,6 +775,141 @@ export const jobWeeklyReviews = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("job_weekly_reviews_week_key").on(t.weekStart)],
+);
+
+/* -------------------------------------------------------------------------- */
+/* IA (Gemini): configuración, claves, registro de llamadas y radar          */
+/* -------------------------------------------------------------------------- */
+// Todo se configura desde /admin/job-search/settings/ai; no hay interruptores por variables de entorno.
+
+export const jobLeadStatus = pgEnum("job_lead_status", js.LEAD_STATUSES);
+
+/** Fila única (id = 1). */
+export const aiSettings = pgTable(
+  "ai_settings",
+  {
+    id: smallint("id").primaryKey().default(1),
+    enabled: boolean("enabled").notNull().default(false),
+    /** Modelo para análisis y textos (calidad). */
+    modelDefault: text("model_default").notNull().default("gemini-3.8-flash"),
+    /** Modelo para tareas masivas y baratas (evaluar resultados del radar). */
+    modelLight: text("model_light").notNull().default("gemini-3.5-flash-lite"),
+    /** Permite usar Google Search (grounding) y la lectura de URLs. */
+    useSearch: boolean("use_search").notNull().default(true),
+    /** Evaluar el encaje con el CV justo después de importar una oferta. */
+    autoMatch: boolean("auto_match").notNull().default(true),
+    /** CV que se usa como referencia; NULL = el CV con texto más reciente. */
+    cvDocumentId: uuid("cv_document_id").references(() => jobDocuments.id, { onDelete: "set null" }),
+    /** Hechos reales adicionales para la IA (disponibilidad, idiomas, preferencias…). */
+    profileContext: text("profile_context"),
+    radarEnabled: boolean("radar_enabled").notNull().default(false),
+    /** Una búsqueda por línea; vacío = se construye a partir de los roles objetivo. */
+    radarQueries: text("radar_queries"),
+    radarLocations: text("radar_locations"),
+    radarExcludedCompanies: text("radar_excluded_companies"),
+    radarMinMatch: smallint("radar_min_match").notNull().default(80),
+    radarMaxPerRun: smallint("radar_max_per_run").notNull().default(8),
+    radarMaxAgeDays: smallint("radar_max_age_days").notNull().default(14),
+    radarFrequencyDays: smallint("radar_frequency_days").notNull().default(1),
+    radarLastRunAt: timestamp("radar_last_run_at", { withTimezone: true }),
+    /** Tiempo máximo de trabajo por ejecución del radar (la función tiene su propio límite). */
+    timeBudgetSeconds: smallint("time_budget_seconds").notNull().default(240),
+    ...timestamps,
+  },
+  (t) => [
+    check("ai_settings_singleton", sql`${t.id} = 1`),
+    check(
+      "ai_settings_radar_ranges",
+      sql`${t.radarMinMatch} BETWEEN 0 AND 100 AND ${t.radarMaxPerRun} BETWEEN 1 AND 50 AND ${t.radarMaxAgeDays} BETWEEN 1 AND 90 AND ${t.radarFrequencyDays} BETWEEN 1 AND 30 AND ${t.timeBudgetSeconds} BETWEEN 20 AND 800`,
+    ),
+  ],
+);
+
+/** Claves de la API de Gemini. Se prueban por orden: si una falla, se usa la siguiente. */
+export const aiApiKeys = pgTable("ai_api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  label: text("label").notNull(),
+  /** AES-256-GCM (lib/ai/secrets.ts). Nunca se guarda ni se devuelve en claro. */
+  keyCiphertext: text("key_ciphertext").notNull(),
+  keyLast4: text("key_last4").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  position,
+  successCount: integer("success_count").notNull().default(0),
+  failureCount: integer("failure_count").notNull().default(0),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  /** Hasta cuándo no se usa (límite alcanzado, clave rechazada…). */
+  cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Una fila por llamada lógica a Gemini (con todos sus reintentos). */
+export const aiRuns = pgTable(
+  "ai_runs",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    feature: text("feature").notNull(),
+    model: text("model").notNull(),
+    keyId: uuid("key_id").references(() => aiApiKeys.id, { onDelete: "set null" }),
+    status: text("status").notNull(),
+    attempts: smallint("attempts").notNull().default(1),
+    latencyMs: integer("latency_ms"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("ai_runs_created_idx").on(t.createdAt.desc()), check("ai_runs_status", sql`${t.status} IN ('ok', 'error')`)],
+);
+
+export const jobRadarRuns = pgTable(
+  "job_radar_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    trigger: text("trigger").notNull(),
+    status: text("status").notNull().default("running"),
+    found: integer("found").notNull().default(0),
+    evaluated: integer("evaluated").notNull().default(0),
+    added: integer("added").notNull().default(0),
+    error: text("error"),
+    /** Pasos legibles de la ejecución (búsquedas hechas, descartes…). */
+    log: jsonb("log").notNull().default(sql`'[]'::jsonb`),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("job_radar_runs_started_idx").on(t.startedAt.desc()),
+    check("job_radar_runs_trigger", sql`${t.trigger} IN ('cron', 'manual')`),
+    check("job_radar_runs_status", sql`${t.status} IN ('running', 'ok', 'partial', 'error')`),
+  ],
+);
+
+/** Cada oferta que encuentra el radar, evaluada o no. La URL evita repetirla. */
+export const jobLeads = pgTable(
+  "job_leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    url: text("url").notNull(),
+    title: text("title").notNull(),
+    companyName: text("company_name"),
+    location: text("location"),
+    postedAt: date("posted_at", { mode: "string" }),
+    snippet: text("snippet"),
+    status: jobLeadStatus("status").notNull().default("new"),
+    matchScore: smallint("match_score"),
+    /** Resultado del encaje (motivos, gaps, citas verificadas). */
+    match: jsonb("match"),
+    runId: uuid("run_id").references(() => jobRadarRuns.id, { onDelete: "set null" }),
+    opportunityId: uuid("opportunity_id").references(() => jobOpportunities.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("job_leads_url_key").on(t.url),
+    index("job_leads_status_idx").on(t.status, t.createdAt.desc()),
+    check("job_leads_url_https", sql`${t.url} ~ '^https://'`),
+    check("job_leads_score_range", sql`${t.matchScore} IS NULL OR ${t.matchScore} BETWEEN 0 AND 100`),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */

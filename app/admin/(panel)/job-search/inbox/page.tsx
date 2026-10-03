@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { Select, TextField } from "@/components/admin/fields";
 import { ActionButton } from "@/components/admin/job-search/ActionButton";
-import { Empty, PageHeader, StatusBadge } from "@/components/admin/job-search/ui";
+import { AiOff, Empty, PageHeader, StatusBadge } from "@/components/admin/job-search/ui";
+import { importJobAction } from "@/lib/ai/actions";
+import { getAiSettings } from "@/lib/ai/store";
+import { db } from "@/lib/job-search/server";
 import { quickAddOpportunityAction, reviewInboxAction } from "@/lib/job-search/actions";
 import { relativeDay } from "@/lib/job-search/dates";
 import { OPTIONS, SOURCE_LABEL } from "@/lib/job-search/labels";
@@ -13,7 +16,7 @@ export const metadata = { title: "Bandeja" };
 
 /** Bandeja → revisión → cualificada o descartada. Pegar una URL basta para no perder una oferta. */
 export default async function InboxPage() {
-  const { snapshot: s, engine } = await getWorkspace();
+  const [{ snapshot: s, engine }, ai] = await Promise.all([getWorkspace(), getAiSettings(db)]);
   const items = s.opportunities
     .filter((o) => (INBOX_STATUSES as readonly string[]).includes(o.status))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -22,14 +25,27 @@ export default async function InboxPage() {
     <div className="space-y-8">
       <PageHeader title="Bandeja" count={items.length} description="Guarda ofertas en segundos pegando la URL y decide después: cualificar la pasa al tablero; descartar la archiva." />
 
-      <div className="panel p-4">
+      {ai.enabled ? (
+        <div className="panel border-carbon p-4">
+          <ActionForm action={importJobAction} submitLabel="Importar con IA" pendingLabel="Leyendo la oferta y comparando con tu CV…" className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto] md:items-end">
+            <TextField name="url" label="URL de la oferta" type="url" placeholder="https://…" hint="Gemini lee la oferta, extrae todos los datos, la resume, detecta señales de alerta y calcula el encaje con tu CV." />
+          </ActionForm>
+        </div>
+      ) : (
+        <AiOff what="Para importar ofertas automáticamente con Gemini" />
+      )}
+
+      <details className="panel p-4" open={!ai.enabled}>
+        <summary className="cursor-pointer text-sm text-carbon">Guardar solo el enlace, sin IA</summary>
+        <div className="mt-4">
         <ActionForm action={quickAddOpportunityAction} submitLabel="Guardar en la bandeja" className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_1fr_1fr_1fr] md:items-end">
           <TextField name="url" label="URL de la oferta" type="url" placeholder="https://…" />
           <TextField name="companyName" label="Empresa (opcional)" />
           <TextField name="title" label="Puesto (opcional)" />
           <Select name="source" label="Fuente" options={OPTIONS.source()} defaultValue="other" />
         </ActionForm>
-      </div>
+        </div>
+      </details>
 
       {items.length ? (
         <ul className="panel divide-y divide-slate-200">

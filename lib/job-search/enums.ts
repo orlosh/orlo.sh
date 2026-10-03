@@ -42,6 +42,7 @@ export const SOURCES = [
   "welcome_to_the_jungle",
   "community",
   "friend",
+  "radar",
   "other",
 ] as const;
 export type Source = (typeof SOURCES)[number];
@@ -133,3 +134,6 @@ export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
 export const SENIORITIES = ["intern", "junior", "mid", "senior", "staff", "lead", "principal", "manager", "director"] as const;
 export type Seniority = (typeof SENIORITIES)[number];
+
+export const LEAD_STATUSES = ["new", "added", "below_threshold", "dismissed", "unreachable"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];

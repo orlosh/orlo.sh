@@ -17,7 +17,7 @@ export function connect() {
 
   async function reset() {
     await owner.execute(sql`
-      truncate table job_activities, job_status_history, job_tasks, job_notes, job_opportunity_documents,
+      truncate table ai_runs, ai_api_keys, ai_settings, job_leads, job_radar_runs, job_activities, job_status_history, job_tasks, job_notes, job_opportunity_documents,
         job_documents, job_referrals, job_opportunity_contacts, job_interviews, job_star_stories, job_contacts,
         job_opportunities, job_companies, job_weekly_reviews, job_search_goal,
         audit_log, note_tags, notes, tags, project_images, project_technologies, projects,

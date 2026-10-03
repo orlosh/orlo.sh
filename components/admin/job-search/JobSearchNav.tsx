@@ -16,11 +16,12 @@ const SECTIONS: Section[] = [
   {
     label: "Oportunidades",
     href: `${BASE}/pipeline`,
-    paths: ["/pipeline", "/opportunities", "/inbox"],
+    paths: ["/pipeline", "/opportunities", "/inbox", "/radar"],
     views: [
       { label: "Tablero", href: `${BASE}/pipeline` },
       { label: "Lista", href: `${BASE}/opportunities` },
       { label: "Bandeja", href: `${BASE}/inbox` },
+      { label: "Radar", href: `${BASE}/radar` },
     ],
   },
   { label: "Tareas", href: `${BASE}/tasks`, paths: ["/tasks"] },

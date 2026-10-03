@@ -25,6 +25,14 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET debe tener al menos 32 caracteres"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   APP_VERSION: z.string().default("dev"),
+  // Secreto con el que Vercel Cron llama a /api/cron/*. No es un interruptor: si falta, el radar
+  // programado no se ejecuta (el botón del panel sigue funcionando).
+  CRON_SECRET: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || null)
+    .refine((v) => v === null || v.length >= 16, "CRON_SECRET debe tener al menos 16 caracteres"),
   // Cabecera de la que se toma la IP del cliente (rate limiting y auditoría).
   // Solo debe fijarse cuando la escribe una capa de confianza que sobrescribe
   // lo que envíe el cliente: "x-real-ip" en Vercel, "x-forwarded-for" detrás

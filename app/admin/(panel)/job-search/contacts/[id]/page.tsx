@@ -3,7 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Checkbox, Select, TextArea, TextField } from "@/components/admin/fields";
+import { DraftMessage } from "@/components/admin/job-search/ai";
 import { Notes, TaskFields, TaskList, Timeline } from "@/components/admin/job-search/lists";
+import { draftMessageAction } from "@/lib/ai/actions";
+import { MESSAGE_KINDS } from "@/lib/ai/features";
+import { getAiSettings } from "@/lib/ai/store";
 import { Badge, Empty, Section, StatusBadge } from "@/components/admin/job-search/ui";
 import { deleteContactAction, logInteractionAction, saveContactAction } from "@/lib/job-search/actions";
 import { mailto } from "@/lib/job-search/calendar";
@@ -18,7 +22,7 @@ export const metadata = { title: "Contacto" };
 export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
   const id = await editorId(params);
   if (!id) redirect("/admin/job-search/contacts");
-  const [data, s] = await Promise.all([repo.getContact(db, id), getSnapshot()]);
+  const [data, s, ai] = await Promise.all([repo.getContact(db, id), getSnapshot(), getAiSettings(db)]);
   if (!data) notFound();
   const { contact: c, activities, tasks, notes } = data;
   const tz = s.goal.timezone;
@@ -115,6 +119,21 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
           ) : null}
         </Section>
       </div>
+
+      {ai.enabled ? (
+        <Section title="Redactar un mensaje (IA)">
+          <div className="panel p-4">
+            <DraftMessage
+              action={draftMessageAction}
+              kinds={MESSAGE_KINDS}
+              contactId={c.id}
+              opportunityId={c.opportunities[0]?.opportunity.id}
+              email={c.email}
+              defaultKind={c.kind === "recruiter" ? "recruiter_reply" : c.status === "to_contact" ? "cold_outreach" : "follow_up"}
+            />
+          </div>
+        </Section>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Section title="Tareas">

@@ -21,7 +21,8 @@ import type {
  * Cada escritura se ejecuta en una transacción junto con su entrada en el log de auditoría:
  * no puede haber un cambio sin rastro.
  */
-export type Actor = { id: string; ip: string | null };
+/** id null = el sistema (p. ej., el radar programado), que también deja rastro en la auditoría. */
+export type Actor = { id: string | null; ip: string | null };
 export type Tx = Parameters<Parameters<ContentDb["transaction"]>[0]>[0];
 
 export async function audit(

@@ -3,7 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { TextArea } from "@/components/admin/fields";
+import { AiButton, Rehearsal } from "@/components/admin/job-search/ai";
 import { ChecklistField } from "@/components/admin/job-search/ChecklistField";
+import { prepareInterviewAction, rehearseAction } from "@/lib/ai/actions";
+import { getAiSettings } from "@/lib/ai/store";
 import { InterviewForm } from "@/components/admin/job-search/InterviewForm";
 import { Notes, TaskList } from "@/components/admin/job-search/lists";
 import { Badge, Empty, PlainText, Section, StatusBadge } from "@/components/admin/job-search/ui";
@@ -31,7 +34,7 @@ const DEFAULT_CHECKLIST = [
 export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const id = await editorId(params);
   if (!id) redirect("/admin/job-search/interviews");
-  const [data, { snapshot: s, profile }, options] = await Promise.all([getInterview(db, id), getWorkspace(), getOptions()]);
+  const [data, { snapshot: s, profile }, options, ai] = await Promise.all([getInterview(db, id), getWorkspace(), getOptions(), getAiSettings(db)]);
   if (!data) notFound();
   const { interview: i, tasks, notes, stories, previous } = data;
   const o = i.opportunity;
@@ -92,7 +95,21 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <Section title="Preparación">
+      <Section
+        title="Preparación"
+        action={
+          <AiButton
+            action={prepareInterviewAction}
+            hidden={{ id: i.id }}
+            label="Preparar con IA"
+            pendingLabel="Preparando la entrevista…"
+            disabled={ai.enabled ? undefined : "Activa la IA en Ajustes → Inteligencia artificial"}
+          />
+        }
+      >
+        <p className="text-xs text-slate-600">
+          La IA rellena los campos vacíos y, en los que ya tienen texto, añade sus sugerencias debajo: nunca borra lo tuyo. Las respuestas solo usan hechos de tu CV y de tus historias STAR.
+        </p>
         <ActionForm action={saveInterviewPrepAction} hidden={{ id: i.id }} submitLabel="Guardar preparación" className="space-y-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="panel space-y-4 p-4">
@@ -144,6 +161,22 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
           </div>
         </ActionForm>
       </Section>
+
+      {ai.enabled ? (
+        <Section title="Ensayar una respuesta (IA)">
+          <div className="panel p-4">
+            <Rehearsal
+              action={rehearseAction}
+              interviewId={i.id}
+              questions={(i.prepQuestions ?? "")
+                .split(/\r?\n/)
+                .map((l) => l.replace(/^-\s*/, "").replace(/\s*\(por qué:.*\)$/, "").trim())
+                .filter((l) => l.length > 5)
+                .slice(0, 20)}
+            />
+          </div>
+        </Section>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section title="Tareas de esta entrevista">

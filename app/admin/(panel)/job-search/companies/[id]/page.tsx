@@ -3,7 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Checkbox, Select, TextArea, TextField } from "@/components/admin/fields";
+import { AiButton } from "@/components/admin/job-search/ai";
+import { CompanyResearchCard } from "@/components/admin/job-search/AiResults";
 import { Notes } from "@/components/admin/job-search/lists";
+import { researchCompanyAction } from "@/lib/ai/actions";
+import { getAiSettings } from "@/lib/ai/store";
 import { Badge, Empty, Section, StatusBadge } from "@/components/admin/job-search/ui";
 import { deleteCompanyAction, saveCompanyAction } from "@/lib/job-search/actions";
 import { relativeDay } from "@/lib/job-search/dates";
@@ -19,7 +23,7 @@ const INTEREST = [{ value: "", label: "—" }, ...[1, 2, 3, 4, 5].map((n) => ({ 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const id = await editorId(params);
   if (!id) redirect("/admin/job-search/companies");
-  const [data, s] = await Promise.all([repo.getCompany(db, id), getSnapshot()]);
+  const [data, s, ai] = await Promise.all([repo.getCompany(db, id), getSnapshot(), getAiSettings(db)]);
   if (!data) notFound();
   const { company: c, opportunities, contacts, notes } = data;
 
@@ -52,6 +56,25 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           </p>
         ) : null}
       </div>
+
+      <Section
+        title="Investigación (IA + Google Search)"
+        action={
+          <AiButton
+            action={researchCompanyAction}
+            hidden={{ id: c.id }}
+            label={c.aiResearch ? "Actualizar investigación" : "Investigar con IA"}
+            pendingLabel="Buscando en la web…"
+            disabled={!ai.enabled ? "Activa la IA en Ajustes → Inteligencia artificial" : !ai.useSearch ? "Activa el acceso web en Ajustes → IA" : undefined}
+          />
+        }
+      >
+        {c.aiResearch ? (
+          <CompanyResearchCard research={c.aiResearch as Parameters<typeof CompanyResearchCard>[0]["research"]} />
+        ) : (
+          <Empty>Producto, tamaño, financiación, noticias, señales de contratación o despidos y lo que se sabe de su proceso de selección, con las fuentes.</Empty>
+        )}
+      </Section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section title={`Oportunidades · ${opportunities.length}`}>

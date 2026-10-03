@@ -72,6 +72,7 @@ export const SOURCE_LABEL: Record<Source, string> = {
   welcome_to_the_jungle: "Welcome to the Jungle",
   community: "Comunidad",
   friend: "Amistad",
+  radar: "Radar IA",
   other: "Otra",
 };
 
