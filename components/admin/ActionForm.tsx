@@ -15,11 +15,7 @@ export const useFieldError = (name: string) => {
 function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-background-dark disabled:opacity-60"
-    >
+    <button type="submit" disabled={pending} className="btn">
       {pending ? "Guardando…" : label}
     </button>
   );
@@ -49,7 +45,10 @@ export function ActionForm({
         <div className="flex items-center gap-4 pt-2">
           <Submit label={submitLabel} />
           <p role="status" aria-live="polite" className="text-sm">
-            {state.status === "success" ? <span className="text-carbon">✓ {state.message}</span> : null}
+            {state.status === "success" ? <span className="inline-flex items-center gap-2 text-slate-700">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
+                {state.message}
+              </span> : null}
             {state.status === "error" ? <span className="text-red-500">{state.message}</span> : null}
           </p>
         </div>

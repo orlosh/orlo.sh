@@ -20,7 +20,7 @@ export default async function NoteEditor({ params }: { params: Promise<{ id: str
         ← notas
       </Link>
       <div className="mt-3 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-carbon">{row?.title ?? "Nueva nota"}</h1>
+        <h1 className="page-title">{row?.title ?? "Nueva nota"}</h1>
         {row?.published ? (
           <Link href={`/notes/${row.slug}`} className="link text-sm">
             ver publicada ↗
@@ -48,7 +48,7 @@ export default async function NoteEditor({ params }: { params: Promise<{ id: str
         </ActionForm>
       </div>
       {id ? (
-        <div className="mt-10 border-t border-border-dark/15 pt-6">
+        <div className="mt-10 border-t border-slate-200 pt-6">
           <DeleteButton action={deleteNoteAction} hidden={{ id }} />
         </div>
       ) : null}

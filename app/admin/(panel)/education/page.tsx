@@ -31,7 +31,7 @@ export default async function EducationAdmin() {
   return (
     <div className="max-w-4xl space-y-14">
       <section>
-        <h1 className="text-2xl font-semibold text-carbon">Formación y certificaciones</h1>
+        <h1 className="page-title">Formación y certificaciones</h1>
         <ul className="mt-6 space-y-4">
           {education.map((e) => (
             <li key={e.id} className="panel p-4">
@@ -56,7 +56,7 @@ export default async function EducationAdmin() {
       </section>
 
       <section>
-        <h2 className="text-xl font-semibold text-carbon">Idiomas</h2>
+        <h2 className="text-lg font-semibold text-carbon">Idiomas</h2>
         <ul className="mt-6 space-y-4">
           {languages.map((l) => (
             <li key={l.id} className="panel p-4">

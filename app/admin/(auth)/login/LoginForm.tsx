@@ -28,26 +28,27 @@ export function LoginForm() {
     router.refresh();
   }
 
+  // Campos de terminal: sin caja, solo la línea inferior que se enciende en verde al enfocar.
   const input =
-    "w-full rounded-sm border border-border-dark/15 bg-white px-3 py-2 text-sm text-carbon focus:border-carbon";
+    "w-full border-0 border-b border-primary/25 bg-transparent px-0 py-2 text-white caret-primary placeholder:text-slate-600 focus:border-primary";
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor="email" className="label block">
-          Email
+    <form onSubmit={onSubmit} className="mt-8 space-y-6">
+      <div>
+        <label htmlFor="email" className="block text-sm text-slate-400">
+          <span className="text-primary">&gt;</span> Email
         </label>
         <input id="email" name="email" type="email" autoComplete="username" required className={input} />
       </div>
-      <div className="space-y-1.5">
-        <label htmlFor="password" className="label block">
-          Contraseña
+      <div>
+        <label htmlFor="password" className="block text-sm text-slate-400">
+          <span className="text-primary">&gt;</span> Contraseña
         </label>
         <input id="password" name="password" type="password" autoComplete="current-password" required className={input} />
       </div>
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-background-dark disabled:opacity-60"
+        className="w-full bg-primary px-4 py-2.5 font-bold text-carbon shadow-[0_0_18px_rgb(13_242_89/0.35)] hover:bg-white disabled:opacity-60"
       >
         {pending ? "Comprobando…" : "Entrar"}
       </button>

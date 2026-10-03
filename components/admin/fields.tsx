@@ -4,8 +4,7 @@ import { useId, useState } from "react";
 import { Markdown } from "@/components/content/Markdown";
 import { useFieldError } from "./ActionForm";
 
-const inputCls =
-  "w-full rounded-sm border border-border-dark/15 bg-white px-3 py-2 text-sm text-carbon placeholder:text-slate-400 focus:border-carbon aria-[invalid=true]:border-red-500";
+const inputCls = "field";
 
 function Wrapper({
   id,
@@ -22,7 +21,7 @@ function Wrapper({
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="label block">
+      <label htmlFor={id} className="field-label block">
         {label}
       </label>
       {children}
@@ -109,21 +108,20 @@ export function MarkdownField({
   const [preview, setPreview] = useState(false);
   return (
     <Wrapper id={id} label={label} hint={hint ?? "Markdown. El HTML crudo se ignora."} error={error}>
-      <div className="mb-2 flex gap-2 font-mono text-xs">
+      <div className="mb-2 inline-flex rounded-md border border-slate-200 bg-white p-0.5 font-mono text-xs">
         <button
           type="button"
           onClick={() => setPreview(false)}
           aria-pressed={!preview}
-          className={!preview ? "text-carbon" : "text-slate-600 hover:text-carbon"}
+          className={`rounded px-2 py-0.5 ${!preview ? "bg-slate-100 text-carbon" : "text-slate-600 hover:text-carbon"}`}
         >
           escribir
         </button>
-        <span className="text-slate-400">/</span>
         <button
           type="button"
           onClick={() => setPreview(true)}
           aria-pressed={preview}
-          className={preview ? "text-carbon" : "text-slate-600 hover:text-carbon"}
+          className={`rounded px-2 py-0.5 ${preview ? "bg-slate-100 text-carbon" : "text-slate-600 hover:text-carbon"}`}
         >
           vista previa
         </button>
@@ -139,7 +137,7 @@ export function MarkdownField({
         className={`${inputCls} font-mono text-xs leading-relaxed`}
       />
       {preview ? (
-        <div className="min-h-24 rounded-sm border border-border-dark/15 p-4">
+        <div className="min-h-24 rounded-md border border-slate-200 bg-white p-4">
           {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-sm text-slate-600">Vacío</p>}
         </div>
       ) : null}
@@ -173,7 +171,7 @@ export function Checkbox({ name, label, defaultChecked }: { name: string; label:
   const id = useId();
   return (
     <div className="flex items-center gap-2">
-      <input id={id} type="checkbox" name={name} defaultChecked={defaultChecked} className="size-4 accent-carbon" />
+      <input id={id} type="checkbox" name={name} defaultChecked={defaultChecked} className="size-4 accent-primary" />
       <label htmlFor={id} className="text-sm text-slate-800">
         {label}
       </label>
@@ -195,7 +193,7 @@ export function TechnologyPicker({
       <legend className="label">Tecnologías</legend>
       {groups.map((g) => (
         <div key={g.name}>
-          <p className="mb-1.5 text-xs text-slate-600">{g.name}</p>
+          <p className="mb-2 font-mono text-xs text-slate-500">{g.name}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             {g.technologies.map((t) => (
               <label key={t.id} className="flex items-center gap-1.5 text-sm text-slate-800">
@@ -204,7 +202,7 @@ export function TechnologyPicker({
                   name="technologyIds"
                   value={t.id}
                   defaultChecked={chosen.has(t.id)}
-                  className="size-3.5 accent-carbon"
+                  className="size-3.5 accent-primary"
                 />
                 {t.name}
               </label>

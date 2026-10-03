@@ -12,7 +12,7 @@ export default async function StackAdmin() {
   return (
     <div className="max-w-4xl space-y-14">
       <div>
-        <h1 className="text-2xl font-semibold text-carbon">Stack</h1>
+        <h1 className="page-title">Stack</h1>
         <p className="mt-2 text-sm text-slate-600">
           Capas y tecnologías. Los años de experiencia solo se muestran si se rellenan; nunca hay porcentajes.
         </p>
@@ -40,7 +40,7 @@ export default async function StackAdmin() {
             </div>
           </details>
 
-          <ul className="divide-y divide-border-dark/15 border-y border-border-dark/15">
+          <ul className="divide-y divide-slate-200 border-y border-slate-200">
             {layer.technologies.map((t) => (
               <li key={t.id} className="py-3">
                 <details>

@@ -4,8 +4,8 @@
  * Paleta: los tokens de Tailwind originales del proyecto más slate / white / red-500 (solo errores).
  * El sitio público es una pantalla de terminal: negro, texto claro y el verde primary como
  * fósforo en enlaces, botones y detalles (13:1 sobre negro). El panel de administración sigue
- * en claro. Para no mezclar ambos, los estilos del sitio público cuelgan
- * de la variante `site:` (cualquier elemento dentro de `.site`).
+ * en claro y minimalista; su login, que es público, va en oscuro. Para no mezclar ambos, los
+ * estilos del sitio público cuelgan de la variante `site:` (cualquier elemento dentro de `.site`).
  */
 @theme inline {
   --color-primary: #0df259;
@@ -66,12 +66,30 @@
 }
 
 @layer components {
-  /* Clases del panel de administración (claro). */
+  /*
+   * Clases del panel de administración: claro y sobrio. Tinta carbon, bordes slate muy suaves y el
+   * verde solo como relleno o marca (nunca como texto sobre claro: no da contraste).
+   */
   .label {
-    @apply text-xs font-medium uppercase tracking-[0.08em] text-slate-600;
+    @apply font-mono text-xs uppercase tracking-[0.08em] text-slate-500;
+  }
+  .field-label {
+    @apply text-sm font-medium text-slate-700;
+  }
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-carbon;
   }
   .panel {
-    @apply rounded-md border border-border-dark/15 bg-white;
+    @apply rounded-lg border border-slate-200 bg-white;
+  }
+  .field {
+    @apply w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-carbon shadow-xs transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-carbon aria-[invalid=true]:border-red-500;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-carbon px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-black disabled:opacity-60;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 transition-colors hover:border-slate-300 hover:text-carbon disabled:opacity-60;
   }
   .link {
     @apply text-carbon underline decoration-border-dark/40 underline-offset-4 hover:decoration-carbon;

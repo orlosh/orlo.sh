@@ -31,7 +31,7 @@ export function DeleteButton({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-sm border border-red-500/40 px-3 py-1.5 text-xs text-red-500 hover:border-red-500 disabled:opacity-60"
+        className="rounded-md px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/5 disabled:opacity-60"
       >
         {label}
       </button>

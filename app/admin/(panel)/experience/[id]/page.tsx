@@ -28,7 +28,7 @@ export default async function ExperienceEditor({ params }: { params: Promise<{ i
       <Link href="/admin/experience" className="font-mono text-xs text-slate-600 hover:text-carbon">
         ← experiencia
       </Link>
-      <h1 className="mt-3 text-2xl font-semibold text-carbon">{row ? `${row.role} · ${row.company}` : "Nueva experiencia"}</h1>
+      <h1 className="page-title mt-3">{row ? `${row.role} · ${row.company}` : "Nueva experiencia"}</h1>
       <div className="mt-8">
         <ActionForm action={saveExperience} hidden={id ? { id } : {}}>
           <div className="grid gap-5 md:grid-cols-2">
@@ -59,7 +59,7 @@ export default async function ExperienceEditor({ params }: { params: Promise<{ i
         </ActionForm>
       </div>
       {id ? (
-        <div className="mt-10 border-t border-border-dark/15 pt-6">
+        <div className="mt-10 border-t border-slate-200 pt-6">
           <DeleteButton action={deleteExperienceAction} hidden={{ id }} />
         </div>
       ) : null}

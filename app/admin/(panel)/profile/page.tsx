@@ -13,7 +13,7 @@ export default async function ProfileAdmin() {
   return (
     <div className="max-w-3xl space-y-14">
       <section>
-        <h1 className="text-2xl font-semibold text-carbon">Perfil</h1>
+        <h1 className="page-title">Perfil</h1>
         <div className="mt-6">
           <ActionForm action={saveProfile}>
             <div className="grid gap-5 md:grid-cols-2">
@@ -40,7 +40,7 @@ export default async function ProfileAdmin() {
       </section>
 
       <section aria-labelledby="links">
-        <h2 id="links" className="text-xl font-semibold text-carbon">
+        <h2 id="links" className="text-lg font-semibold text-carbon">
           Enlaces
         </h2>
         <ul className="mt-6 space-y-6">

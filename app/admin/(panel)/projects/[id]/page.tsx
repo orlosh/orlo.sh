@@ -43,7 +43,7 @@ export default async function ProjectEditor({ params }: { params: Promise<{ id: 
         ← proyectos
       </Link>
       <div className="mt-3 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-carbon">{row?.title ?? "Nuevo proyecto"}</h1>
+        <h1 className="page-title">{row?.title ?? "Nuevo proyecto"}</h1>
         {row?.published ? (
           <Link href={`/projects/${row.slug}`} className="link text-sm">
             ver publicado ↗
@@ -67,7 +67,7 @@ export default async function ProjectEditor({ params }: { params: Promise<{ id: 
           </div>
           <TechnologyPicker groups={groups} selected={row?.technologies.map((t) => t.technologyId) ?? []} />
 
-          <fieldset className="space-y-5 border-t border-border-dark/15 pt-6">
+          <fieldset className="space-y-5 border-t border-slate-200 pt-6">
             <legend className="label">Caso de estudio · las secciones vacías no se publican</legend>
             {SECTIONS.map(([key, label]) => (
               <MarkdownField key={key} name={key} label={label} defaultValue={row?.[key]} rows={6} />
@@ -93,7 +93,7 @@ export default async function ProjectEditor({ params }: { params: Promise<{ id: 
         </ActionForm>
       </div>
       {id ? (
-        <div className="mt-10 border-t border-border-dark/15 pt-6">
+        <div className="mt-10 border-t border-slate-200 pt-6">
           <DeleteButton action={deleteProjectAction} hidden={{ id }} />
         </div>
       ) : null}
