@@ -39,6 +39,8 @@ COPY lib/architecture.ts ./lib/architecture.ts
 COPY lib/db-target.ts ./lib/db-target.ts
 COPY lib/content/types.ts ./lib/content/types.ts
 COPY lib/validation/content.ts ./lib/validation/content.ts
+# db/schema.ts importa los valores de los enums de Job Search (seed y create-admin lo cargan).
+COPY lib/job-search/enums.ts ./lib/job-search/enums.ts
 USER node
 CMD ["node_modules/.bin/tsx", "scripts/migrate.ts"]
 
