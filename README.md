@@ -83,12 +83,14 @@ app/
   (site)/              public pages: home, projects/[slug], notes/[slug], stack, experience, engineering
   admin/(auth)/login   login (Better Auth client)
   admin/(panel)/       protected CRUD: profile, experience, projects, stack, notes, education
+  admin/(panel)/job-search/  private job-search tracker (see "Job Search" below)
   api/v1/              read-only JSON API
   api/auth/[...all]    Better Auth handler
   health/              liveness + readiness
 components/
   content/             Markdown (no raw HTML), Diagram (SVG from data), cards, pills
   admin/               forms (useActionState), field errors, Markdown preview
+  admin/job-search/    Kanban, opportunity table, Quick Add, checklist, shared lists
 db/
   schema.ts            tables, enums, FKs, indexes, CHECK constraints
   relations.ts         relational query config
@@ -97,6 +99,8 @@ db/
 lib/
   content/             public read side (repository + cached wrappers + DTO types)
   admin/               write side (mutations + Server Actions + admin queries)
+  job-search/          job-search domain: pure logic (score, JD analysis, analytics, daily plan,
+                       automations) + repository, mutations and Server Actions
   auth/                Better Auth config, authorization guard
   security/            CSP, rate limiter, client IP
   validation/          Zod schemas shared by forms, actions and API
@@ -178,6 +182,12 @@ notes n─m tags                                             (note_tags)
 education · languages
 audit_log n─1 user            user 1─n session · account   (Better Auth)
 rate_limit                                                 (login throttling)
+
+job_search_goal (singleton)                                (job search, admin only)
+job_companies 1─n job_opportunities n─m job_contacts       (job_opportunity_contacts)
+job_opportunities 1─n job_status_history · job_interviews · job_tasks · job_activities
+                  1─n job_referrals · job_notes            n─m job_documents (job_opportunity_documents)
+job_star_stories · job_weekly_reviews
 ```
 
 The database enforces the invariants on its own, even if the application is bypassed: slug format,
@@ -190,6 +200,39 @@ pnpm db:generate   # new migration from schema changes (review the SQL before co
 pnpm db:migrate    # apply (owner role)
 pnpm db:studio     # browse
 ```
+
+---
+
+## Job Search
+
+`/admin/job-search` is a private tracker for a 30-day job search, built on the same auth, layout,
+components, database and patterns as the rest of the admin. None of it is reachable from the public
+site or the API.
+
+- **Dashboard**: Day X / 30, KPIs, the day's plan (ordered: upcoming interviews → final processes →
+  overdue follow-ups → high priority → referrals → networking → applications → research, each with
+  its reason), alerts, main bottleneck, prioritised opportunities, funnel and best channel.
+- **Inbox → Review → Qualified / Discarded**, **Pipeline** (native drag & drop plus a status select
+  on every card for touch and keyboard), **Opportunities** table (search, filters, sorting, bulk
+  actions, columns saved per browser), opportunity detail (Overview, Job Description, Match,
+  Contacts, Activity, Notes, Documents, Interviews, Tasks).
+- **Contacts** CRM, **Networking**, **Companies** (Tier A/B/C), **Tasks** (Today / Tomorrow / This
+  Week / Overdue / Completed), **Interviews** with a prep workspace and reusable STAR stories,
+  **Documents** (which version was sent where), **Analytics**, **Weekly Review**, global search,
+  Quick Add.
+- **Automations** run inside the same transaction as the change that triggers them: Applied →
+  activity + follow-up (5 business days); interview scheduled → activity + prep task + thank-you
+  task (24 h); referral requested → activity + follow-up (4 business days); recruiter contacted →
+  follow-up (3 business days); Rejected → pending tasks closed; Offer → outcome recorded. Every
+  status change is written to `job_status_history`. Rules are editable under *Ajustes*.
+- **Opportunity score** (0–100): ten factors, each showing the points and the reason; manual
+  override requires a reason and keeps the computed breakdown visible.
+- **Job Description analysis and CV matching** are local and deterministic (`lib/job-search/jd.ts`):
+  no text is sent to any external service. Matches are backed by real evidence (stack, experience,
+  projects, stored CV text); anything without evidence is reported as a gap, never filled in.
+- **Insights** only come from recorded data; below a minimum sample (5) the UI says
+  *Insufficient data*. Calendar integration is a Google Calendar link and an `.ics` download per
+  interview; email is a `mailto:` follow-up. No OAuth or inbox access.
 
 ---
 

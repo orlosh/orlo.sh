@@ -7,10 +7,10 @@ import { z } from "zod";
  */
 
 const trimmed = (max: number) => z.string().trim().max(max);
-const required = (max: number) => trimmed(max).min(1, "Obligatorio");
+export const required = (max: number) => trimmed(max).min(1, "Obligatorio");
 
 /** Un string vacío de un campo de formulario se convierte en NULL. */
-const optional = (max: number) =>
+export const optional = (max: number) =>
   trimmed(max)
     .transform((v) => (v === "" ? null : v))
     .nullable()
@@ -24,7 +24,7 @@ export const slugSchema = z
   .max(80)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Solo minúsculas, números y guiones");
 
-const httpsUrl = z
+export const httpsUrl = z
   .string()
   .trim()
   .max(500)
@@ -36,14 +36,14 @@ const httpsUrl = z
     }
   }, "Debe ser una URL https://");
 
-const optionalHttpsUrl = z
+export const optionalHttpsUrl = z
   .union([z.literal(""), httpsUrl])
   .nullable()
   .optional()
   .transform((v) => (v ? v : null));
 
-const isoDate = z.iso.date("Fecha YYYY-MM-DD");
-const optionalIsoDate = z
+export const isoDate = z.iso.date("Fecha YYYY-MM-DD");
+export const optionalIsoDate = z
   .union([z.literal(""), isoDate])
   .nullable()
   .optional()

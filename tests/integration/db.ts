@@ -17,7 +17,10 @@ export function connect() {
 
   async function reset() {
     await owner.execute(sql`
-      truncate table audit_log, note_tags, notes, tags, project_images, project_technologies, projects,
+      truncate table job_activities, job_status_history, job_tasks, job_notes, job_opportunity_documents,
+        job_documents, job_referrals, job_opportunity_contacts, job_interviews, job_star_stories, job_contacts,
+        job_opportunities, job_companies, job_weekly_reviews, job_search_goal,
+        audit_log, note_tags, notes, tags, project_images, project_technologies, projects,
         experience_highlights, experience_technologies, experiences, technologies, technology_categories,
         education, languages, social_links, profile, session, account, verification, rate_limit, "user"
       restart identity cascade

@@ -22,9 +22,9 @@ import type {
  * no puede haber un cambio sin rastro.
  */
 export type Actor = { id: string; ip: string | null };
-type Tx = Parameters<Parameters<ContentDb["transaction"]>[0]>[0];
+export type Tx = Parameters<Parameters<ContentDb["transaction"]>[0]>[0];
 
-async function audit(
+export async function audit(
   tx: Tx,
   actor: Actor,
   action: "create" | "update" | "delete",
