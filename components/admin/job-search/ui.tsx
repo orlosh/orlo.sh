@@ -64,7 +64,7 @@ export function Stat({ label, value, hint, href }: { label: string; value: React
 export function Section({ title, action, children, id }: { title: string; action?: React.ReactNode; children: React.ReactNode; id?: string }) {
   const hid = id ?? `s-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <section aria-labelledby={hid} className="space-y-3">
+    <section aria-labelledby={hid} className="min-w-0 space-y-3">
       <div className="flex items-center justify-between gap-4">
         <h2 id={hid} className="label">
           {title}

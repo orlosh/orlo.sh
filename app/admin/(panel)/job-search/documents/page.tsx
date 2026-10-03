@@ -10,18 +10,18 @@ import { DOCUMENT_KIND_LABEL, OPTIONS, STATUS_LABEL } from "@/lib/job-search/lab
 import { listDocuments } from "@/lib/job-search/repository";
 import { db } from "@/lib/job-search/server";
 
-export const metadata = { title: "Documents" };
+export const metadata = { title: "Documentos" };
 
 function DocumentFields({ d }: { d?: typeof jobDocuments.$inferSelect }) {
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Select name="kind" label="Tipo" options={OPTIONS.documentKind()} defaultValue={d?.kind ?? "cv"} />
         <TextField name="name" label="Nombre" defaultValue={d?.name} required />
         <TextField name="version" label="Versión" defaultValue={d?.version} placeholder="v3 · backend" />
         <TextField name="url" label="URL" type="url" defaultValue={d?.url} hint="Drive, Notion… (https)" />
       </div>
-      <TextArea name="content" label="Texto (para CV matching)" rows={8} defaultValue={d?.content} hint="Pega el texto del CV: cada línea se evalúa contra la Job Description. Se queda en tu base de datos." />
+      <TextArea name="content" label="Texto (para compararlo con las ofertas)" rows={8} defaultValue={d?.content} hint="Pega el texto del CV: cada línea se evalúa contra cada oferta. Se queda en tu base de datos." />
       <TextArea name="notes" label="Notas" rows={2} defaultValue={d?.notes} />
       {d ? <Checkbox name="archived" label="Archivado (ya no se ofrece al registrar candidaturas)" defaultChecked={d.archived} /> : null}
     </>
@@ -32,7 +32,7 @@ export default async function DocumentsPage() {
   const docs = await listDocuments(db);
   return (
     <div className="space-y-8">
-      <PageHeader title="Documents" count={docs.length} description="CVs, cover letters, versiones del portfolio, case studies y referencias. Cada candidatura registra qué versión enviaste." />
+      <PageHeader title="Documentos" count={docs.length} description="CVs, cartas de presentación, versiones del portfolio, casos de estudio y referencias. Cada candidatura registra qué versión enviaste." />
       {docs.length ? (
         <ul className="space-y-3">
           {docs.map((d) => (

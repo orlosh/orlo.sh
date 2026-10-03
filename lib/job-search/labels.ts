@@ -35,66 +35,66 @@ import {
   WORKPLACES,
 } from "./enums";
 
-/** Etiquetas visibles. Los nombres de estados, tipos y fuentes siguen la nomenclatura pedida. */
+/** Etiquetas visibles, todas en castellano. Los valores internos (enums) no cambian. */
 
 export const STATUS_LABEL: Record<OpportunityStatus, string> = {
-  discovered: "Discovered",
-  researching: "Researching",
-  qualified: "Qualified",
-  networking: "Networking",
-  referral_requested: "Referral Requested",
-  referral_received: "Referral Received",
-  ready_to_apply: "Ready to Apply",
-  applied: "Applied",
-  recruiter_screen: "Recruiter Screen",
-  interview: "Interview",
-  technical: "Technical / Case",
-  final_interview: "Final Interview",
-  offer: "Offer",
-  rejected: "Rejected",
-  ghosted: "Ghosted",
-  withdrawn: "Withdrawn",
-  archived: "Archived",
+  discovered: "Nueva",
+  researching: "Investigando",
+  qualified: "Cualificada",
+  networking: "Buscando contactos",
+  referral_requested: "Recomendación pedida",
+  referral_received: "Recomendación recibida",
+  ready_to_apply: "Lista para aplicar",
+  applied: "Aplicada",
+  recruiter_screen: "Llamada con reclutador",
+  interview: "Entrevista",
+  technical: "Técnica / caso práctico",
+  final_interview: "Entrevista final",
+  offer: "Oferta",
+  rejected: "Descartado por la empresa",
+  ghosted: "Sin respuesta",
+  withdrawn: "Me retiré",
+  archived: "Archivada",
 };
 
 export const PRIORITY_LABEL: Record<Priority, string> = { high: "Alta", medium: "Media", low: "Baja" };
 
-export const WORKPLACE_LABEL: Record<Workplace, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "Onsite" };
+export const WORKPLACE_LABEL: Record<Workplace, string> = { remote: "Remoto", hybrid: "Híbrido", onsite: "Presencial" };
 
 export const SOURCE_LABEL: Record<Source, string> = {
   linkedin: "LinkedIn",
-  company_website: "Company Website",
-  recruiter: "Recruiter",
-  referral: "Referral",
-  networking: "Networking",
-  job_board: "Job Board",
+  company_website: "Web de la empresa",
+  recruiter: "Reclutador",
+  referral: "Recomendación",
+  networking: "Red de contactos",
+  job_board: "Portal de empleo",
   wellfound: "Wellfound",
   welcome_to_the_jungle: "Welcome to the Jungle",
-  community: "Community",
-  friend: "Friend",
-  other: "Other",
+  community: "Comunidad",
+  friend: "Amistad",
+  other: "Otra",
 };
 
 export const OUTCOME_LABEL: Record<Outcome, string> = {
   offer: "Oferta recibida",
   accepted: "Oferta aceptada",
   declined: "Oferta rechazada",
-  rejected: "Rechazado",
+  rejected: "Descartado por la empresa",
   ghosted: "Sin respuesta",
-  withdrawn: "Retirado",
+  withdrawn: "Me retiré",
 };
 
-export const TIER_LABEL: Record<CompanyTier, string> = { a: "Tier A", b: "Tier B", c: "Tier C" };
+export const TIER_LABEL: Record<CompanyTier, string> = { a: "Categoría A", b: "Categoría B", c: "Categoría C" };
 
 export const CONTACT_KIND_LABEL: Record<ContactKind, string> = {
-  recruiter: "Recruiter",
-  hiring_manager: "Hiring Manager",
-  employee: "Employee",
-  referral: "Referral",
-  founder: "Founder",
-  former_colleague: "Former colleague",
-  friend: "Friend",
-  other: "Other",
+  recruiter: "Reclutador/a",
+  hiring_manager: "Responsable de contratación",
+  employee: "Empleado/a",
+  referral: "Puede recomendarme",
+  founder: "Fundador/a",
+  former_colleague: "Excompañero/a",
+  friend: "Amistad",
+  other: "Otro",
 };
 
 export const CONTACT_STATUS_LABEL: Record<ContactStatus, string> = {
@@ -106,36 +106,36 @@ export const CONTACT_STATUS_LABEL: Record<ContactStatus, string> = {
 };
 
 export const TASK_KIND_LABEL: Record<TaskKind, string> = {
-  apply: "Apply",
-  research: "Research",
-  contact: "Contact",
-  follow_up: "Follow Up",
-  prepare_interview: "Prepare Interview",
-  send_thank_you: "Send Thank You",
-  ask_referral: "Ask Referral",
-  update_cv: "Update CV",
-  update_portfolio: "Update Portfolio",
-  other: "Other",
+  apply: "Aplicar",
+  research: "Investigar",
+  contact: "Contactar",
+  follow_up: "Seguimiento",
+  prepare_interview: "Preparar entrevista",
+  send_thank_you: "Enviar agradecimiento",
+  ask_referral: "Pedir recomendación",
+  update_cv: "Actualizar CV",
+  update_portfolio: "Actualizar portfolio",
+  other: "Otra",
 };
 
 export const INTERVIEW_KIND_LABEL: Record<InterviewKind, string> = {
-  recruiter_screen: "Recruiter Screen",
-  hiring_manager: "Hiring Manager",
-  technical: "Technical",
-  portfolio_review: "Portfolio Review",
-  case_study: "Case Study",
-  take_home: "Take Home",
-  behavioral: "Behavioral",
+  recruiter_screen: "Llamada con reclutador",
+  hiring_manager: "Responsable de contratación",
+  technical: "Técnica",
+  portfolio_review: "Revisión de portfolio",
+  case_study: "Caso práctico",
+  take_home: "Prueba para casa",
+  behavioral: "Competencias",
   panel: "Panel",
   final: "Final",
-  other: "Other",
+  other: "Otra",
 };
 
 export const INTERVIEW_FORMAT_LABEL: Record<InterviewFormat, string> = {
   video: "Videollamada",
   phone: "Teléfono",
   onsite: "Presencial",
-  async: "Asíncrono",
+  async: "Asíncrona",
 };
 
 export const INTERVIEW_OUTCOME_LABEL: Record<InterviewOutcome, string> = {
@@ -150,48 +150,48 @@ export const ACTIVITY_LABEL: Record<ActivityType, string> = {
   opportunity_created: "Oportunidad creada",
   status_changed: "Cambio de estado",
   applied: "Candidatura enviada",
-  recruiter_contacted: "Recruiter contactado",
+  recruiter_contacted: "Reclutador contactado",
   reply: "Respuesta recibida",
-  referral_requested: "Referral solicitado",
-  referral_received: "Referral recibido",
+  referral_requested: "Recomendación pedida",
+  referral_received: "Recomendación recibida",
   interview_scheduled: "Entrevista programada",
-  interview_completed: "Entrevista completada",
-  follow_up: "Follow-up",
-  rejection: "Rechazo",
+  interview_completed: "Entrevista hecha",
+  follow_up: "Seguimiento",
+  rejection: "Descarte",
   offer: "Oferta",
   note: "Nota",
   contact_created: "Contacto creado",
-  contact_interaction: "Interacción con contacto",
+  contact_interaction: "Mensaje con contacto",
   task_completed: "Tarea completada",
-  document_used: "Documento usado",
+  document_used: "Documento enviado",
 };
 
 export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   cv: "CV",
-  cover_letter: "Cover letter",
+  cover_letter: "Carta de presentación",
   portfolio: "Portfolio",
-  case_study: "Case study",
+  case_study: "Caso de estudio",
   reference: "Referencia",
   other: "Otro",
 };
 
 export const REFERRAL_STATUS_LABEL: Record<ReferralStatus, string> = {
-  requested: "Solicitado",
-  received: "Recibido",
-  declined: "Rechazado",
+  requested: "Pedida",
+  received: "Recibida",
+  declined: "Rechazada",
   no_response: "Sin respuesta",
 };
 
 export const SENIORITY_LABEL: Record<Seniority, string> = {
-  intern: "Intern",
+  intern: "Prácticas",
   junior: "Junior",
-  mid: "Mid",
+  mid: "Intermedio",
   senior: "Senior",
   staff: "Staff",
   lead: "Lead",
   principal: "Principal",
   manager: "Manager",
-  director: "Director",
+  director: "Dirección",
 };
 
 type Option = { value: string; label: string };

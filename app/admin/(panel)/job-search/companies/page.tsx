@@ -8,7 +8,7 @@ import { OPTIONS } from "@/lib/job-search/labels";
 import * as repo from "@/lib/job-search/repository";
 import { db, getSnapshot } from "@/lib/job-search/server";
 
-export const metadata = { title: "Companies" };
+export const metadata = { title: "Empresas" };
 
 const INTEREST = [{ value: "", label: "—" }, ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n}/5` }))];
 
@@ -16,9 +16,9 @@ export default async function CompaniesPage() {
   const [s, rows] = await Promise.all([getSnapshot(), repo.listCompanies(db)]);
   return (
     <div className="space-y-8">
-      <PageHeader title="Companies" count={rows.length} description="Empresas objetivo por tier. Una empresa se crea sola al escribir su nombre en una oportunidad o un contacto." />
+      <PageHeader title="Empresas" count={rows.length} description="Empresas objetivo por categoría. Una empresa se crea sola al escribir su nombre en una oportunidad o un contacto." />
       {rows.length ? (
-        <Table head={["Empresa", "Tier", "Interés", "Oportunidades", "Recruiters", "Contactos", "Referrals", "Última actividad", "Próxima acción"]} minWidth="56rem">
+        <Table head={["Empresa", "Categoría", "Interés", "Oportunidades", "Reclutadores", "Contactos", "Recomendaciones", "Última actividad", "Próxima acción"]} minWidth="56rem">
           {rows.map((c) => (
             <tr key={c.id} className={c.archived ? "opacity-60" : ""}>
               <td className={td}>
@@ -60,7 +60,7 @@ export default async function CompaniesPage() {
       <Section title="Nueva empresa objetivo">
         <ActionForm action={saveCompanyAction} submitLabel="Añadir" className="panel grid gap-4 p-4 md:grid-cols-4">
           <TextField name="name" label="Empresa" required />
-          <Select name="tier" label="Tier" options={OPTIONS.tier("—")} defaultValue="b" />
+          <Select name="tier" label="Categoría" options={OPTIONS.tier("—")} defaultValue="b" />
           <Select name="interest" label="Interés" options={INTEREST} />
           <TextField name="careersUrl" label="Página de empleo" type="url" />
         </ActionForm>

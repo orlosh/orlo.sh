@@ -18,12 +18,12 @@ const interviewHref = (id: string) => `${BASE}/interviews/${id}`;
 export const PLAN_CATEGORIES = [
   "Entrevistas próximas",
   "Procesos finales",
-  "Follow-ups vencidos",
+  "Seguimientos vencidos",
   "Alta prioridad",
-  "Referrals",
-  "Networking",
-  "Applications",
-  "Research",
+  "Recomendaciones",
+  "Contactos",
+  "Candidaturas",
+  "Investigación",
   "Otras tareas",
 ] as const;
 
@@ -98,7 +98,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
         key: `interview:${i.id}`,
         category: 0,
         title: `Preparar ${INTERVIEW_KIND_LABEL[i.kind]}${o ? ` · ${oppLabel(o)}` : ""}`,
-        reason: `Es ${relativeDay(day, today)}${i.prepTotal ? ` · preparación ${i.prepDone}/${i.prepTotal}` : " · sin checklist de preparación"}`,
+        reason: `Es ${relativeDay(day, today)}${i.prepTotal ? ` · preparación ${i.prepDone}/${i.prepTotal}` : " · sin lista de preparación"}`,
         href: interviewHref(i.id),
       },
       `0:${i.opportunityId}:prepare_interview`,
@@ -126,11 +126,11 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
   const followTask = new Set(s.tasks.filter((t) => t.status === "open" && t.kind === "follow_up").map((t) => t.opportunityId ?? t.contactId));
   for (const o of s.opportunities) {
     if (!o.nextFollowUpAt || o.nextFollowUpAt > today || isClosed(o.status) || followTask.has(o.id)) continue;
-    push({ key: `fu-opp:${o.id}`, category: 2, title: `Follow-up · ${oppLabel(o)}`, reason: `Follow-up previsto ${relativeDay(o.nextFollowUpAt, today)} · ${STATUS_LABEL[o.status]}`, href: oppHref(o.id) }, `2:${o.id}:follow_up`);
+    push({ key: `fu-opp:${o.id}`, category: 2, title: `Seguimiento · ${oppLabel(o)}`, reason: `Seguimiento previsto ${relativeDay(o.nextFollowUpAt, today)} · ${STATUS_LABEL[o.status]}`, href: oppHref(o.id) }, `2:${o.id}:follow_up`);
   }
   for (const c of s.contacts) {
     if (!c.nextFollowUpAt || c.nextFollowUpAt > today || c.status === "closed" || followTask.has(c.id)) continue;
-    push({ key: `fu-contact:${c.id}`, category: 2, title: `Follow-up · ${c.name}${c.companyName ? ` (${c.companyName})` : ""}`, reason: `Previsto ${relativeDay(c.nextFollowUpAt, today)}`, href: contactHref(c.id) });
+    push({ key: `fu-contact:${c.id}`, category: 2, title: `Seguimiento · ${c.name}${c.companyName ? ` (${c.companyName})` : ""}`, reason: `Previsto ${relativeDay(c.nextFollowUpAt, today)}`, href: contactHref(c.id) });
   }
 
   // 4. Alta prioridad aún sin aplicar.
@@ -141,7 +141,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
     .forEach((o) => {
       const idle = Math.floor(daysBetween(o.lastActivityAt, s.now));
       push(
-        { key: `high:${o.id}`, category: 3, title: `${o.nextAction ?? "Avanzar"} · ${oppLabel(o)}`, reason: `Prioridad alta · score ${scores.get(o.id) ?? "—"} · ${STATUS_LABEL[o.status]} · ${idle ? `sin actividad ${idle} d` : "activa hoy"}`, href: oppHref(o.id) },
+        { key: `high:${o.id}`, category: 3, title: `${o.nextAction ?? "Avanzar"} · ${oppLabel(o)}`, reason: `Prioridad alta · puntuación ${scores.get(o.id) ?? "—"} · ${STATUS_LABEL[o.status]} · ${idle ? `sin actividad ${idle} d` : "activa hoy"}`, href: oppHref(o.id) },
         `3:${o.id}`,
       );
     });
@@ -155,7 +155,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
     const c = r.contactId ? contacts.get(r.contactId) : null;
     if (!o || isClosed(o.status)) continue;
     push(
-      { key: `ref:${r.id}`, category: 4, title: `Recordar referral${c ? ` a ${c.name}` : ""} · ${oppLabel(o)}`, reason: `Solicitado hace ${age} d sin respuesta (regla: ${s.goal.followupReferralDays} d)`, href: oppHref(o.id) },
+      { key: `ref:${r.id}`, category: 4, title: `Recordar la recomendación${c ? ` a ${c.name}` : ""} · ${oppLabel(o)}`, reason: `Pedida hace ${age} d sin respuesta (regla: ${s.goal.followupReferralDays} d)`, href: oppHref(o.id) },
       `4:${o.id}:ask_referral`,
     );
   }
@@ -164,7 +164,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
     if (o.referral !== "none" || !["qualified", "networking"].includes(o.status) || !o.companyId) continue;
     const insider = s.contacts.find((c) => c.companyId === o.companyId && c.kind !== "recruiter" && c.status !== "closed");
     if (!insider) continue;
-    push({ key: `ask-ref:${o.id}`, category: 4, title: `Pedir referral a ${insider.name} · ${oppLabel(o)}`, reason: `${STATUS_LABEL[o.status]} y tienes un contacto en ${o.companyName}`, href: oppHref(o.id) }, `4:${o.id}:ask_referral`);
+    push({ key: `ask-ref:${o.id}`, category: 4, title: `Pedir recomendación a ${insider.name} · ${oppLabel(o)}`, reason: `${STATUS_LABEL[o.status]} y tienes un contacto en ${o.companyName}`, href: oppHref(o.id) }, `4:${o.id}:ask_referral`);
   }
 
   // 6. Networking: contactos pendientes de un primer mensaje.
@@ -182,7 +182,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
     .slice(0, 5)
     .forEach((o) =>
       push(
-        { key: `apply:${o.id}`, category: 6, title: `Aplicar · ${oppLabel(o)}`, reason: `${STATUS_LABEL[o.status]} · score ${scores.get(o.id) ?? "—"}${o.deadline ? ` · cierra ${relativeDay(o.deadline, today)}` : ""}`, href: oppHref(o.id) },
+        { key: `apply:${o.id}`, category: 6, title: `Aplicar · ${oppLabel(o)}`, reason: `${STATUS_LABEL[o.status]} · puntuación ${scores.get(o.id) ?? "—"}${o.deadline ? ` · cierra ${relativeDay(o.deadline, today)}` : ""}`, href: oppHref(o.id) },
         `6:${o.id}:apply`,
       ),
     );
@@ -190,7 +190,7 @@ export function dailyPlan(s: Snapshot, scores: Map<string, number>, limit = 20):
   // 8. Research: bandeja sin revisar.
   const inbox = s.opportunities.filter((o) => (INBOX_STATUSES as readonly string[]).includes(o.status));
   if (inbox.length) {
-    push({ key: "inbox", category: 7, title: `Revisar inbox (${inbox.length})`, reason: `${inbox.length} oportunidad${inbox.length === 1 ? "" : "es"} sin cualificar`, href: `${BASE}/inbox` });
+    push({ key: "inbox", category: 7, title: `Revisar la bandeja (${inbox.length})`, reason: `${inbox.length} oportunidad${inbox.length === 1 ? "" : "es"} sin cualificar`, href: `${BASE}/inbox` });
   }
 
   return items.sort((a, b) => a.category - b.category).slice(0, limit);
@@ -219,7 +219,7 @@ export function alerts(s: Snapshot): Alert[] {
   for (const t of s.tasks) {
     if (t.status !== "open" || !t.dueDate || t.dueDate >= today) continue;
     if (t.kind !== "follow_up" && t.kind !== "send_thank_you") continue;
-    out.push({ key: `fu:${t.id}`, level: "critical", kind: "Follow-up overdue", title: t.title, detail: dueReason(t.dueDate, today), href: t.opportunityId ? `${oppHref(t.opportunityId)}?tab=tasks` : `${BASE}/tasks?view=overdue` });
+    out.push({ key: `fu:${t.id}`, level: "critical", kind: "Seguimiento vencido", title: t.title, detail: dueReason(t.dueDate, today), href: t.opportunityId ? `${oppHref(t.opportunityId)}?tab=tasks` : `${BASE}/tasks?view=overdue` });
   }
 
   const openFollow = new Set(s.tasks.filter((t) => t.status === "open" && t.kind === "follow_up").map((t) => t.opportunityId));
@@ -227,20 +227,20 @@ export function alerts(s: Snapshot): Alert[] {
     if (isClosed(o.status)) continue;
     const href = oppHref(o.id);
     if (o.nextFollowUpAt && o.nextFollowUpAt < today && !openFollow.has(o.id)) {
-      out.push({ key: `fuo:${o.id}`, level: "critical", kind: "Follow-up overdue", title: oppLabel(o), detail: `Follow-up previsto ${relativeDay(o.nextFollowUpAt, today)}`, href });
+      out.push({ key: `fuo:${o.id}`, level: "critical", kind: "Seguimiento vencido", title: oppLabel(o), detail: `Seguimiento previsto ${relativeDay(o.nextFollowUpAt, today)}`, href });
     }
     if (o.status === "applied" && !o.nextFollowUpAt && !openFollow.has(o.id)) {
-      out.push({ key: `nofu:${o.id}`, level: "warning", kind: "Candidatura sin follow-up", title: oppLabel(o), detail: o.appliedAt ? `Aplicada ${relativeDay(o.appliedAt, today)}` : "Aplicada", href });
+      out.push({ key: `nofu:${o.id}`, level: "warning", kind: "Candidatura sin seguimiento", title: oppLabel(o), detail: o.appliedAt ? `Aplicada ${relativeDay(o.appliedAt, today)}` : "Aplicada", href });
     }
     const idle = Math.floor(daysBetween(o.lastActivityAt, now));
     if (!(INBOX_STATUSES as readonly string[]).includes(o.status) && idle >= goal.staleDays) {
       out.push({ key: `idle:${o.id}`, level: o.priority === "high" ? "warning" : "info", kind: "Oportunidad inactiva", title: oppLabel(o), detail: `${idle} d sin actividad · ${STATUS_LABEL[o.status]}`, href });
     }
     if (o.offerDeadline && o.offerDeadline >= today && diffDays(today, o.offerDeadline) <= 3) {
-      out.push({ key: `offer:${o.id}`, level: "critical", kind: "Offer deadline", title: oppLabel(o), detail: `Responder ${relativeDay(o.offerDeadline, today)}`, href });
+      out.push({ key: `offer:${o.id}`, level: "critical", kind: "Plazo de la oferta", title: oppLabel(o), detail: `Responder ${relativeDay(o.offerDeadline, today)}`, href });
     }
     if (o.deadline && !o.appliedAt && isPreApply(o.status) && o.deadline >= today && diffDays(today, o.deadline) <= 3) {
-      out.push({ key: `dl:${o.id}`, level: "warning", kind: "Application deadline", title: oppLabel(o), detail: `Cierra ${relativeDay(o.deadline, today)}`, href });
+      out.push({ key: `dl:${o.id}`, level: "warning", kind: "Cierre de candidaturas", title: oppLabel(o), detail: `Cierra ${relativeDay(o.deadline, today)}`, href });
     }
     const inStage = Math.floor(daysBetween(o.statusChangedAt, now));
     if ((isInterviewing(o.status) || o.status === "applied") && inStage >= 14) {
@@ -251,7 +251,7 @@ export function alerts(s: Snapshot): Alert[] {
   for (const c of s.contacts) {
     if (c.status !== "contacted" && c.status !== "in_conversation") continue;
     if (c.nextFollowUpAt && c.nextFollowUpAt < today) {
-      out.push({ key: `fuc:${c.id}`, level: "critical", kind: "Follow-up overdue", title: c.name, detail: `Previsto ${relativeDay(c.nextFollowUpAt, today)}`, href: contactHref(c.id) });
+      out.push({ key: `fuc:${c.id}`, level: "critical", kind: "Seguimiento vencido", title: c.name, detail: `Previsto ${relativeDay(c.nextFollowUpAt, today)}`, href: contactHref(c.id) });
     }
     if (c.lastInteractionAt && diffDays(c.lastInteractionAt, today) >= goal.staleDays) {
       out.push({ key: `coldc:${c.id}`, level: "info", kind: "Contacto inactivo", title: `${c.name}${c.companyName ? ` · ${c.companyName}` : ""}`, detail: `Última interacción ${relativeDay(c.lastInteractionAt, today)}`, href: contactHref(c.id) });
@@ -263,7 +263,7 @@ export function alerts(s: Snapshot): Alert[] {
     const age = diffDays(r.requestedAt, today);
     const o = opps.get(r.opportunityId);
     if (age >= goal.followupReferralDays && o && !isClosed(o.status)) {
-      out.push({ key: `ref:${r.id}`, level: "warning", kind: "Referral pendiente", title: oppLabel(o), detail: `Solicitado hace ${age} d`, href: oppHref(o.id) });
+      out.push({ key: `ref:${r.id}`, level: "warning", kind: "Recomendación pendiente", title: oppLabel(o), detail: `Pedida hace ${age} d`, href: oppHref(o.id) });
     }
   }
 

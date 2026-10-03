@@ -1,4 +1,4 @@
-import { addBusinessDays, addDays, dateIn } from "./dates";
+import { addBusinessDays, addDays, dateIn, formatDay } from "./dates";
 import type { ActivityType, InterviewKind, OpportunityStatus, Outcome, Priority, TaskKind } from "./enums";
 import { INTERVIEW_KIND_LABEL, STATUS_LABEL } from "./labels";
 import type { Goal } from "./model";
@@ -70,7 +70,7 @@ export function transitionEffects(
     if (to === "applied") {
       const due = addBusinessDays(appliedAt < today ? today : appliedAt, goal.followupApplicationDays);
       fx.tasks.push({
-        title: `Follow-up candidatura · ${opp.label}`,
+        title: `Seguimiento de la candidatura · ${opp.label}`,
         kind: "follow_up",
         dueDate: due,
         priority: "medium",
@@ -82,15 +82,15 @@ export function transitionEffects(
 
   if (to === "referral_requested") {
     fx.referral = "request";
-    fx.activities.push({ type: "referral_requested", summary: `Referral solicitado · ${opp.label}` });
+    fx.activities.push({ type: "referral_requested", summary: `Recomendación pedida · ${opp.label}` });
     const due = addBusinessDays(today, goal.followupReferralDays);
-    fx.tasks.push({ title: `Follow-up referral · ${opp.label}`, kind: "follow_up", dueDate: due, priority: "medium", origin: "auto:referral" });
+    fx.tasks.push({ title: `Seguimiento de la recomendación · ${opp.label}`, kind: "follow_up", dueDate: due, priority: "medium", origin: "auto:referral" });
     fx.set.nextFollowUpAt = due;
   }
 
   if (to === "referral_received") {
     fx.referral = "receive";
-    fx.activities.push({ type: "referral_received", summary: `Referral recibido · ${opp.label}` });
+    fx.activities.push({ type: "referral_received", summary: `Recomendación recibida · ${opp.label}` });
     fx.set.nextFollowUpAt = null;
   }
 
@@ -155,10 +155,10 @@ export function interviewEffects(
   const tasks: TaskEffect[] = [
     { title: `Preparar ${kindLabel} · ${opp.label}`, kind: "prepare_interview", dueDate: prepDue, priority: "high", origin: "auto:interview" },
   ];
-  // Thank-you en las 24 h siguientes; no aplica a pruebas asíncronas.
+  // Agradecimiento en las 24 h siguientes; no aplica a pruebas asíncronas.
   if (interview.kind !== "take_home") {
     tasks.push({
-      title: `Enviar thank-you · ${opp.label}`,
+      title: `Enviar agradecimiento · ${opp.label}`,
       kind: "send_thank_you",
       dueDate: day ? addDays(day, 1) : addDays(today, 1),
       priority: "high",
@@ -168,7 +168,7 @@ export function interviewEffects(
   const target = INTERVIEW_STATUS[interview.kind];
   const advance = !isClosed(opp.status) && (rank(target) ?? -1) > (rank(opp.status) ?? -1) ? target : null;
   return {
-    activity: { type: "interview_scheduled", summary: `${kindLabel} programada${day ? ` para el ${day}` : ""} · ${opp.label}` } satisfies ActivityEffect,
+    activity: { type: "interview_scheduled", summary: `${kindLabel} programada${day ? ` para el ${formatDay(day)}` : ""} · ${opp.label}` } satisfies ActivityEffect,
     tasks,
     advanceTo: advance,
   };

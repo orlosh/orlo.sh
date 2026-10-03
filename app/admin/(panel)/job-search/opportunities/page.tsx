@@ -7,7 +7,7 @@ import { getWorkspace } from "@/lib/job-search/server";
 import { STAGE_GROUPS } from "@/lib/job-search/stages";
 import { tableRows } from "@/lib/job-search/views";
 
-export const metadata = { title: "Opportunities" };
+export const metadata = { title: "Oportunidades" };
 
 export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -19,11 +19,11 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Opportunities"
+        title="Oportunidades"
         count={rows.length}
         action={
           <Link href="/admin/job-search/opportunities/new" className="btn">
-            Nueva
+            Nueva oportunidad
           </Link>
         }
       />

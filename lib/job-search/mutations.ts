@@ -415,7 +415,7 @@ export async function logInteraction(db: ContentDb, actor: Actor, input: V.Inter
     if (followUp) {
       await insertTasks(
         c,
-        [{ title: `Follow-up · ${contact.name}`, kind: "follow_up", dueDate: followUp, priority: "medium", origin: "auto:contact" }],
+        [{ title: `Seguimiento · ${contact.name}`, kind: "follow_up", dueDate: followUp, priority: "medium", origin: "auto:contact" }],
         { contactId: contact.id, opportunityId: input.opportunityId },
       );
     }
@@ -462,10 +462,10 @@ export async function requestReferral(db: ContentDb, actor: Actor, input: V.Refe
     } else {
       const label = await oppLabelFor(c, opp);
       await c.tx.insert(t.jobReferrals).values({ opportunityId: opp.id, contactId: input.contactId, notes: input.notes, requestedAt: c.today });
-      await logActivity(c, { type: "referral_requested", summary: `Referral solicitado · ${label}` }, { opportunityId: opp.id, contactId: input.contactId, companyId: opp.companyId });
+      await logActivity(c, { type: "referral_requested", summary: `Recomendación pedida · ${label}` }, { opportunityId: opp.id, contactId: input.contactId, companyId: opp.companyId });
       await insertTasks(
         c,
-        [{ title: `Follow-up referral · ${label}`, kind: "follow_up", dueDate: addBusinessDays(c.today, c.goal.followupReferralDays), priority: "medium", origin: "auto:referral" }],
+        [{ title: `Seguimiento de la recomendación · ${label}`, kind: "follow_up", dueDate: addBusinessDays(c.today, c.goal.followupReferralDays), priority: "medium", origin: "auto:referral" }],
         { opportunityId: opp.id, contactId: input.contactId },
       );
     }
@@ -491,7 +491,7 @@ export async function updateReferral(db: ContentDb, actor: Actor, input: V.Refer
         // El estado nuevo registra la actividad; el referral ya está marcado, así que no se duplica.
         await applyTransition(c, opp, "referral_received");
       } else {
-        await logActivity(c, { type: "referral_received", summary: `Referral recibido · ${await oppLabelFor(c, opp)}` }, { opportunityId: opp.id, contactId: ref.contactId });
+        await logActivity(c, { type: "referral_received", summary: `Recomendación recibida · ${await oppLabelFor(c, opp)}` }, { opportunityId: opp.id, contactId: ref.contactId });
         await cancelReferralFollowUps(c, opp.id);
       }
     }

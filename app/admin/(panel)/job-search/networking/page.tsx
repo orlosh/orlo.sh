@@ -8,7 +8,7 @@ import type { ContactSnap, OppSnap, ReferralSnap } from "@/lib/job-search/model"
 import { oppLabel } from "@/lib/job-search/model";
 import { getSnapshot } from "@/lib/job-search/server";
 
-export const metadata = { title: "Networking" };
+export const metadata = { title: "A quién escribir" };
 
 function ContactList({ contacts, detail }: { contacts: ContactSnap[]; detail: (c: ContactSnap) => string }) {
   if (!contacts.length) return <Empty>Nadie aquí.</Empty>;
@@ -75,19 +75,19 @@ export default async function NetworkingPage() {
 
   return (
     <div className="space-y-10">
-      <PageHeader title="Networking" description="Con quién hablar hoy y qué conversaciones están abiertas." />
+      <PageHeader title="A quién escribir" description="Con quién hablar hoy y qué conversaciones siguen abiertas." />
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Por contactar" value={toContact.length} />
-        <Stat label="Follow-ups (≤ 2 días)" value={followUpTasks.length + dueContacts.length} />
+        <Stat label="Seguimientos (≤ 2 días)" value={followUpTasks.length + dueContacts.length} />
         <Stat label="Conversaciones activas" value={active.length} />
-        <Stat label="Referrals recibidos" value={received.length} hint={`${requested.length} pendientes`} />
+        <Stat label="Recomendaciones recibidas" value={received.length} hint={`${requested.length} pendientes`} />
       </dl>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section title={`Personas a contactar · ${toContact.length}`}>
           <ContactList contacts={toContact} detail={(c) => `primer mensaje pendiente desde hace ${diffDays(c.createdAt.toISOString().slice(0, 10), today)} d`} />
         </Section>
-        <Section title="Follow-ups">
+        <Section title="Seguimientos">
           {followUpTasks.length || dueContacts.length ? (
             <ul className="panel divide-y divide-slate-200">
               {followUpTasks.map((t) => {
@@ -112,7 +112,7 @@ export default async function NetworkingPage() {
               ))}
             </ul>
           ) : (
-            <Empty>Sin follow-ups próximos.</Empty>
+            <Empty>Sin seguimientos próximos.</Empty>
           )}
         </Section>
         <Section title={`Conversaciones activas · ${active.length}`}>
@@ -121,16 +121,16 @@ export default async function NetworkingPage() {
         <Section title={`Contactos sin respuesta · ${silent.length}`}>
           <ContactList contacts={silent} detail={last} />
         </Section>
-        <Section title={`Referrals solicitados · ${requested.length}`}>
+        <Section title={`Recomendaciones pedidas · ${requested.length}`}>
           <ReferralList list={requested} opps={opps} contacts={contactsById} today={today} />
         </Section>
-        <Section title={`Referrals recibidos · ${received.length}`}>
+        <Section title={`Recomendaciones recibidas · ${received.length}`}>
           <ReferralList list={received} opps={opps} contacts={contactsById} today={today} />
         </Section>
-        <Section title={`Recruiters contactados · ${recruiters.length}`}>
+        <Section title={`Reclutadores contactados · ${recruiters.length}`}>
           <ContactList contacts={recruiters} detail={last} />
         </Section>
-        <Section title={`Hiring managers contactados · ${managers.length}`}>
+        <Section title={`Responsables de contratación contactados · ${managers.length}`}>
           <ContactList contacts={managers} detail={last} />
         </Section>
       </div>

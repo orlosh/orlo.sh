@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { TextArea, TextField } from "@/components/admin/fields";
@@ -8,17 +7,17 @@ import { deleteStarStoryAction, saveStarStoryAction } from "@/lib/job-search/act
 import { listStarStories } from "@/lib/job-search/repository";
 import { db } from "@/lib/job-search/server";
 
-export const metadata = { title: "STAR stories" };
+export const metadata = { title: "Historias STAR" };
 
 function StoryFields({ s }: { s?: typeof jobStarStories.$inferSelect }) {
   return (
     <>
       <TextField name="title" label="Título" defaultValue={s?.title} required />
       <TextField name="tags" label="Etiquetas" defaultValue={s?.tags} hint="Liderazgo, conflicto, incidente…" />
-      <TextArea name="situation" label="Situation" rows={3} defaultValue={s?.situation} />
-      <TextArea name="task" label="Task" rows={3} defaultValue={s?.task} />
-      <TextArea name="action" label="Action" rows={4} defaultValue={s?.action} />
-      <TextArea name="result" label="Result" rows={3} defaultValue={s?.result} hint="Con cifras solo si son reales." />
+      <TextArea name="situation" label="Situación" rows={3} defaultValue={s?.situation} />
+      <TextArea name="task" label="Tarea" rows={3} defaultValue={s?.task} />
+      <TextArea name="action" label="Acción" rows={4} defaultValue={s?.action} />
+      <TextArea name="result" label="Resultado" rows={3} defaultValue={s?.result} hint="Con cifras solo si son reales." />
     </>
   );
 }
@@ -27,10 +26,7 @@ export default async function StoriesPage() {
   const stories = await listStarStories(db);
   return (
     <div className="space-y-8">
-      <Link href="/admin/job-search/interviews" className="font-mono text-xs text-slate-600 hover:text-carbon">
-        ← interviews
-      </Link>
-      <PageHeader title="STAR stories" count={stories.length} description="Historias reales en formato Situation · Task · Action · Result, reutilizables en cada preparación." />
+      <PageHeader title="Historias STAR" count={stories.length} description="Historias reales en formato STAR (situación, tarea, acción, resultado), reutilizables en cada preparación." />
       {stories.length ? (
         <ul className="space-y-3">
           {stories.map((s) => (
@@ -41,7 +37,7 @@ export default async function StoriesPage() {
                   {s.tags ? <span className="ml-2 font-mono text-xs text-slate-500">{s.tags}</span> : null}
                 </summary>
                 <div className="mt-4 space-y-3">
-                  <ActionForm action={saveStarStoryAction} hidden={{ id: s.id }} className="grid gap-4 md:grid-cols-2">
+                  <ActionForm action={saveStarStoryAction} hidden={{ id: s.id }} className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <StoryFields s={s} />
                   </ActionForm>
                   <DeleteButton action={deleteStarStoryAction} hidden={{ id: s.id }} />

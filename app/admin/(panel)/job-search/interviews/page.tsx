@@ -6,14 +6,14 @@ import { INTERVIEW_FORMAT_LABEL, INTERVIEW_KIND_LABEL, INTERVIEW_OUTCOME_LABEL }
 import { checklistProgress, listInterviews } from "@/lib/job-search/repository";
 import { db, getOptions, getSnapshot } from "@/lib/job-search/server";
 
-export const metadata = { title: "Interviews" };
+export const metadata = { title: "Entrevistas" };
 
 type Row = Awaited<ReturnType<typeof listInterviews>>[number];
 
 function InterviewTable({ rows, tz }: { rows: Row[]; tz: string }) {
   if (!rows.length) return <Empty>Ninguna.</Empty>;
   return (
-    <Table head={["Cuándo", "Empresa · puesto", "Tipo", "Interviewer", "Formato", "Prep", "Resultado"]} minWidth="48rem">
+    <Table head={["Cuándo", "Empresa · puesto", "Tipo", "Entrevistador", "Formato", "Preparación", "Resultado"]} minWidth="48rem">
       {rows.map(({ i, title, companyName }) => {
         const p = checklistProgress(i.prepChecklist);
         return (
@@ -52,7 +52,7 @@ export default async function InterviewsPage() {
   return (
     <div className="space-y-10">
       <PageHeader
-        title="Interviews"
+        title="Entrevistas"
         count={rows.length}
         action={
           <Link href="/admin/job-search/interviews/stories" className="btn-ghost">

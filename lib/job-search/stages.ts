@@ -71,7 +71,7 @@ export function maxRank(statuses: Iterable<OpportunityStatus>): number {
 export const STAGE_GROUPS = {
   pre_apply: { label: "Antes de aplicar", statuses: PRE_APPLY_STATUSES },
   applied: { label: "Aplicada", statuses: ["applied"] },
-  interviewing: { label: "Entrevistando", statuses: INTERVIEWING_STATUSES },
+  interviewing: { label: "En entrevistas", statuses: INTERVIEWING_STATUSES },
   offer: { label: "Oferta", statuses: ["offer"] },
   closed: { label: "Cerrada", statuses: CLOSED_STATUSES },
 } as const satisfies Record<string, { label: string; statuses: readonly OpportunityStatus[] }>;
@@ -83,3 +83,17 @@ export function stageGroup(s: OpportunityStatus): StageGroup {
   }
   return "pre_apply";
 }
+
+/**
+ * Columnas del tablero: fases, no estados (17 columnas no caben ni se leen). Soltar una tarjeta
+ * en una columna la mueve al primer estado de esa fase; dentro de la fase, el estado exacto se
+ * cambia con el selector de la tarjeta. Las cerradas no aceptan soltar: cerrar exige elegir cómo.
+ */
+export const BOARD_COLUMNS = [
+  { key: "review", label: "Por revisar", statuses: ["discovered", "researching"], drop: "researching" },
+  { key: "prep", label: "Preparando", statuses: ["qualified", "networking", "referral_requested", "referral_received", "ready_to_apply"], drop: "qualified" },
+  { key: "applied", label: "Aplicadas", statuses: ["applied"], drop: "applied" },
+  { key: "interviewing", label: "En entrevistas", statuses: ["recruiter_screen", "interview", "technical"], drop: "recruiter_screen" },
+  { key: "final", label: "Final y oferta", statuses: ["final_interview", "offer"], drop: "final_interview" },
+  { key: "closed", label: "Cerradas", statuses: CLOSED_STATUSES, drop: null },
+] as const satisfies readonly { key: string; label: string; statuses: readonly OpportunityStatus[]; drop: OpportunityStatus | null }[];

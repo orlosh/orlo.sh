@@ -12,23 +12,23 @@ export function InterviewForm({ row, opportunities, contacts, timezone }: { row?
   const tz = row?.timezone ?? timezone;
   return (
     <ActionForm action={saveInterviewAction} hidden={row ? { id: row.id } : {}} submitLabel={row ? "Guardar" : "Programar"} className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="md:col-span-2">
-          <Select name="opportunityId" label="Oportunidad (empresa · puesto)" options={opportunities} defaultValue={row?.opportunityId} />
+          <Select name="opportunityId" label="Oportunidad" options={opportunities} defaultValue={row?.opportunityId} />
         </div>
-        <Select name="kind" label="Tipo / etapa" options={OPTIONS.interviewKind()} defaultValue={row?.kind ?? "recruiter_screen"} />
+        <Select name="kind" label="Tipo de entrevista" options={OPTIONS.interviewKind()} defaultValue={row?.kind ?? "recruiter_screen"} />
         <TextField name="round" label="Ronda" type="number" defaultValue={row?.round} />
         <TextField name="scheduledLocal" label="Fecha y hora" type="datetime-local" defaultValue={utcToZonedInput(row?.scheduledAt, tz)} />
-        <TextField name="timezone" label="Timezone" defaultValue={tz} hint="IANA, p. ej. America/New_York" />
+        <TextField name="timezone" label="Zona horaria" defaultValue={tz} hint="Formato IANA, p. ej. America/New_York" />
         <TextField name="durationMinutes" label="Duración (min)" type="number" defaultValue={row?.durationMinutes ?? 45} />
         <Select name="format" label="Formato" options={OPTIONS.interviewFormat("—")} defaultValue={row?.format ?? "video"} />
-        <TextField name="meetingUrl" label="Meeting link" type="url" defaultValue={row?.meetingUrl} />
-        <Select name="interviewerContactId" label="Interviewer (contacto)" options={[{ value: "", label: "—" }, ...contacts]} defaultValue={row?.interviewerContactId} />
-        <TextField name="interviewerName" label="Interviewer (nombre)" defaultValue={row?.interviewerName} />
+        <TextField name="meetingUrl" label="Enlace de la reunión" type="url" defaultValue={row?.meetingUrl} />
+        <Select name="interviewerContactId" label="Entrevistador (contacto)" options={[{ value: "", label: "—" }, ...contacts]} defaultValue={row?.interviewerContactId} />
+        <TextField name="interviewerName" label="Entrevistador (nombre)" defaultValue={row?.interviewerName} />
         <Select name="outcome" label="Resultado" options={OPTIONS.interviewOutcome()} defaultValue={row?.outcome ?? "pending"} />
       </div>
       <TextArea name="topics" label="Temas" rows={2} defaultValue={row?.topics} />
-      <TextArea name="notes" label="Notas / feedback" rows={4} defaultValue={row?.notes} />
+      <TextArea name="notes" label="Notas y feedback" rows={4} defaultValue={row?.notes} />
       <TextField name="nextAction" label="Siguiente acción" defaultValue={row?.nextAction} />
     </ActionForm>
   );

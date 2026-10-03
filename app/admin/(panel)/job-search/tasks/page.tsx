@@ -4,15 +4,15 @@ import { addDays, weekStart } from "@/lib/job-search/dates";
 import * as repo from "@/lib/job-search/repository";
 import { db, getSnapshot } from "@/lib/job-search/server";
 
-export const metadata = { title: "Tasks" };
+export const metadata = { title: "Tareas" };
 
 const VIEWS = [
-  ["today", "Today"],
-  ["tomorrow", "Tomorrow"],
-  ["week", "This Week"],
-  ["overdue", "Overdue"],
-  ["completed", "Completed"],
-  ["all", "Abiertas"],
+  ["today", "Hoy"],
+  ["tomorrow", "Mañana"],
+  ["week", "Esta semana"],
+  ["overdue", "Vencidas"],
+  ["all", "Todas las abiertas"],
+  ["completed", "Hechas"],
 ] as const;
 type View = (typeof VIEWS)[number][0];
 
@@ -34,7 +34,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   }));
   const open = tasks.filter((t) => t.status === "open");
   const filters: Record<View, (t: (typeof tasks)[number]) => boolean> = {
-    // "Today" incluye lo vencido: es lo que hay que hacer hoy.
+    // "Hoy" incluye lo vencido: es lo que hay que hacer hoy.
     today: (t) => t.status === "open" && !!t.dueDate && t.dueDate <= today,
     tomorrow: (t) => t.status === "open" && t.dueDate === tomorrow,
     week: (t) => t.status === "open" && !!t.dueDate && t.dueDate >= today && t.dueDate <= weekEnd,
@@ -47,12 +47,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tasks" count={open.length} description="Las tareas automáticas (follow-ups, preparación de entrevistas, thank-you) aparecen aquí junto con las manuales." />
+      <PageHeader title="Tareas" count={open.length} description="Las automáticas (seguimientos, preparación de entrevistas, agradecimientos) aparecen junto a las tuyas." />
       <Tabs
         current={view}
         tabs={VIEWS.map(([key, label]) => ({ key, label, href: `/admin/job-search/tasks?view=${key}`, count: key === "completed" ? undefined : tasks.filter(filters[key]).length }))}
       />
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <TaskList tasks={list.slice(0, 200)} today={today} showContext />
         <Section title="Nueva tarea">
           <div className="panel p-4">

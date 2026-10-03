@@ -8,11 +8,11 @@ import { OPTIONS } from "@/lib/job-search/labels";
 
 type Opt = { value: string; label: string };
 const KINDS = [
-  ["opportunity", "Opportunity"],
-  ["contact", "Contact"],
-  ["task", "Task"],
-  ["interview", "Interview"],
-  ["note", "Note"],
+  ["opportunity", "Oportunidad"],
+  ["contact", "Contacto"],
+  ["task", "Tarea"],
+  ["interview", "Entrevista"],
+  ["note", "Nota"],
 ] as const;
 type Kind = (typeof KINDS)[number][0];
 
@@ -37,7 +37,7 @@ export function QuickAdd({ opportunities, contacts, today }: { opportunities: Op
           ref.current?.showModal();
         }}
       >
-        <span aria-hidden="true">+</span> Quick add
+        <span aria-hidden="true">+</span> Añadir
       </button>
       <dialog
         ref={ref}
@@ -47,7 +47,7 @@ export function QuickAdd({ opportunities, contacts, today }: { opportunities: Op
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <h2 id="quick-add-title" className="font-medium text-carbon">
-            Quick add
+            Añadir rápido
           </h2>
           <button type="button" onClick={() => ref.current?.close()} className="rounded-md px-2 py-1 text-sm text-slate-600 hover:bg-slate-100" aria-label="Cerrar">
             ✕
@@ -93,7 +93,7 @@ export function QuickAdd({ opportunities, contacts, today }: { opportunities: Op
                     <TextField name="title" label="Cargo" />
                   </div>
                   <TextField name="linkedinUrl" label="LinkedIn" type="url" placeholder="https://www.linkedin.com/in/…" />
-                  <TextField name="email" label="Email" type="email" />
+                  <TextField name="email" label="Correo" type="email" />
                   <Select name="opportunityId" label="Vincular a oportunidad" options={oppOptions} />
                 </ActionForm>
               ) : null}

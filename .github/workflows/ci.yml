@@ -170,8 +170,15 @@ jobs:
       # nada que no haya pasado por este pipeline.
       - name: Descargar la configuración del proyecto de Vercel
         run: pnpm dlx ${{ env.VERCEL_CLI }} pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      # Las variables "Sensitive" de Vercel no se descargan con `vercel pull`, así que el build
+      # no puede depender de ellas: recibe la URL pública desde GitHub y marcadores para los
+      # secretos, igual que el Dockerfile. En runtime Vercel inyecta los valores reales.
       - name: Build
         run: pnpm dlx ${{ env.VERCEL_CLI }} build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          DATABASE_URL: postgres://build:build@127.0.0.1:5432/build
+          BETTER_AUTH_SECRET: build-time-placeholder-never-used-at-runtime
       - name: Desplegar el build
         run: pnpm dlx ${{ env.VERCEL_CLI }} deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
 

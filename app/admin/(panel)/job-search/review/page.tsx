@@ -10,7 +10,7 @@ import { alerts, dailyPlan } from "@/lib/job-search/plan";
 import { listWeeklyReviews } from "@/lib/job-search/repository";
 import { db, getWorkspace } from "@/lib/job-search/server";
 
-export const metadata = { title: "Weekly Review" };
+export const metadata = { title: "Revisión semanal" };
 
 export default async function WeeklyReviewPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
   const sp = await searchParams;
@@ -32,15 +32,15 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
   if (m.applications < s.goal.weeklyApplicationTarget && week === current) {
     actions.push(`Faltan ${s.goal.weeklyApplicationTarget - m.applications} candidaturas para el objetivo semanal (${s.goal.weeklyApplicationTarget}).`);
   }
-  if (m.referralsRequested === 0) actions.push("No has pedido ningún referral esta semana: identifica 3 contactos en empresas Tier A.");
-  if (alertCount) actions.push(`Resuelve ${alertCount} alertas urgentes (follow-ups vencidos, deadlines, entrevistas).`);
+  if (m.referralsRequested === 0) actions.push("No has pedido ninguna recomendación esta semana: busca 3 contactos en empresas de categoría A.");
+  if (alertCount) actions.push(`Resuelve ${alertCount} alertas urgentes (seguimientos vencidos, plazos, entrevistas).`);
   for (const item of dailyPlan(s, scoreValues(engine), 3)) actions.push(`${item.title} — ${item.reason}`);
 
   const best = engine.sources.filter((r) => r.applications > 0).slice(0, 3);
 
   return (
     <div className="space-y-10">
-      <PageHeader title="Weekly Review" description={`Semana del ${formatDay(week)} al ${formatDay(addDays(week, 6))}.`} />
+      <PageHeader title="Revisión semanal" description={`Semana del ${formatDay(week)} al ${formatDay(addDays(week, 6))}.`} />
       <nav aria-label="Semana" className="flex items-center gap-2">
         <Link href={`/admin/job-search/review?week=${prevWeek}`} className="btn-ghost">
           ← Semana anterior
@@ -57,7 +57,7 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
         ) : null}
       </nav>
 
-      <div className="grid gap-10 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <Section title="Resumen de la semana">
           <Table head={["Métrica", "Esta semana", "Anterior", "Cambio"]} minWidth="24rem">
             {keys.map((k) => {
@@ -87,7 +87,7 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
                 ))}
               </ul>
             ) : (
-              <Empty>Insufficient data</Empty>
+              <Empty>Datos insuficientes</Empty>
             )}
           </Section>
           <Section title="Bottleneck">
@@ -97,10 +97,10 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
                 <p className="mt-1 text-slate-600">{neck.reason}</p>
               </div>
             ) : (
-              <Empty>Insufficient data</Empty>
+              <Empty>Datos insuficientes</Empty>
             )}
           </Section>
-          <Section title="Insights">
+          <Section title="Conclusiones">
             {found.length ? (
               <ul className="panel divide-y divide-slate-200">
                 {found.map((i) => (
@@ -111,7 +111,7 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
                 ))}
               </ul>
             ) : (
-              <Empty>Insufficient data</Empty>
+              <Empty>Datos insuficientes</Empty>
             )}
           </Section>
         </div>
@@ -128,7 +128,7 @@ export default async function WeeklyReviewPage({ searchParams }: { searchParams:
       <Section title="Reflexión">
         <div className="panel p-4">
           <ActionForm action={saveWeeklyReviewAction} hidden={{ weekStart: week }} submitLabel={existing ? "Actualizar revisión" : "Guardar revisión"}>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <TextArea name="wins" label="Qué funcionó" rows={4} defaultValue={existing?.wins} />
               <TextArea name="blockers" label="Qué bloqueó" rows={4} defaultValue={existing?.blockers} />
               <TextArea name="focus" label="Foco de la próxima semana" rows={4} defaultValue={existing?.focus} />

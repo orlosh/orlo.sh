@@ -308,8 +308,8 @@ describe("computeScore", () => {
 
   it("missing data scores half and says so", () => {
     const s = computeScore(opp(), { ...ctx, analysis: null, match: null, goal: GOAL });
-    expect(s.factors.find((f) => f.key === "skills")).toMatchObject({ points: 10, reason: "Sin Job Description para analizar." });
-    expect(s.factors.find((f) => f.key === "history")?.reason).toContain("Insufficient data");
+    expect(s.factors.find((f) => f.key === "skills")).toMatchObject({ points: 10, reason: "Sin descripción de la oferta para analizar." });
+    expect(s.factors.find((f) => f.key === "history")?.reason).toContain("Datos insuficientes");
   });
 
   it("manual override replaces the score but keeps the computed breakdown", () => {
@@ -371,7 +371,7 @@ describe("analytics", () => {
   });
 
   it("flags volume as the bottleneck when there are few opportunities", () => {
-    expect(bottleneck(snap({ opportunities: [opp()] }), factsFor(snap({ opportunities: [opp()] })))?.stage).toBe("Opportunities");
+    expect(bottleneck(snap({ opportunities: [opp()] }), factsFor(snap({ opportunities: [opp()] })))?.stage).toBe("Oportunidades");
   });
 
   it("counts the week's activity", () => {
@@ -414,7 +414,7 @@ describe("dailyPlan / alerts / kpis", () => {
     const list = alerts(s);
     expect(list[0].level).toBe("critical");
     const kinds = list.map((a) => a.kind);
-    expect(kinds).toEqual(expect.arrayContaining(["Entrevista próxima", "Follow-up overdue", "Application deadline", "Oportunidad inactiva"]));
+    expect(kinds).toEqual(expect.arrayContaining(["Entrevista próxima", "Seguimiento vencido", "Cierre de candidaturas", "Oportunidad inactiva"]));
   });
 
   it("counts the goal day and dashboard numbers", () => {

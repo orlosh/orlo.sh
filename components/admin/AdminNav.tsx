@@ -11,7 +11,7 @@ const NAV = [
   ["/admin/stack", "Stack"],
   ["/admin/notes", "Notas"],
   ["/admin/education", "Formación"],
-  ["/admin/job-search", "Job Search"],
+  ["/admin/job-search", "Búsqueda de empleo"],
 ] as const;
 
 /** Navegación del panel con la sección actual marcada por una barra verde. */

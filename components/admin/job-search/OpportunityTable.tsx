@@ -38,16 +38,16 @@ const COLUMNS = [
   ["title", "Puesto"],
   ["status", "Estado"],
   ["priority", "Prioridad"],
-  ["score", "Score"],
+  ["score", "Puntuación"],
   ["source", "Fuente"],
   ["workplace", "Modalidad"],
   ["location", "Ubicación"],
   ["salary", "Salario"],
-  ["referral", "Referral"],
-  ["recruiter", "Recruiter"],
+  ["referral", "Recomendación"],
+  ["recruiter", "Reclutador"],
   ["daysInStage", "Días en fase"],
   ["appliedAt", "Aplicada"],
-  ["nextFollowUpAt", "Follow-up"],
+  ["nextFollowUpAt", "Seguimiento"],
   ["nextAction", "Próxima acción"],
   ["discoveredAt", "Descubierta"],
 ] as const;
@@ -236,7 +236,7 @@ export function OpportunityTable({ rows, initial }: { rows: TableRow[]; initial:
       case "salary":
         return <span className="font-mono text-xs">{money(r)}</span>;
       case "referral":
-        return r.referral === "none" ? "—" : r.referral === "received" ? "Recibido" : "Solicitado";
+        return r.referral === "none" ? "—" : r.referral === "received" ? "Recibida" : "Pedida";
       case "recruiter":
         return r.hasRecruiter ? "Sí" : "—";
       case "daysInStage":
@@ -256,25 +256,25 @@ export function OpportunityTable({ rows, initial }: { rows: TableRow[]; initial:
         <details className="relative">
           <summary className="btn-ghost cursor-pointer list-none">Filtros{activeFilters ? ` · ${activeFilters}` : ""}</summary>
           <div className="panel absolute right-0 z-20 mt-2 grid w-[min(40rem,calc(100vw-2rem))] gap-3 p-4 shadow-lg sm:grid-cols-3">
-            <SelectFilter label="Status" value={filters.status} onChange={set("status")} options={OPTIONS.status()} />
-            <SelectFilter label="Stage" value={filters.stage} onChange={set("stage")} options={Object.entries(STAGE_GROUPS).map(([value, g]) => ({ value, label: g.label }))} />
-            <SelectFilter label="Priority" value={filters.priority} onChange={set("priority")} options={OPTIONS.priority()} />
-            <SelectFilter label="Source" value={filters.source} onChange={set("source")} options={OPTIONS.source()} />
-            <SelectFilter label="Company" value={filters.company} onChange={set("company")} options={companies.map((c) => ({ value: c, label: c }))} />
-            <SelectFilter label="Workplace" value={filters.workplace} onChange={set("workplace")} options={OPTIONS.workplace()} />
+            <SelectFilter label="Estado" value={filters.status} onChange={set("status")} options={OPTIONS.status()} />
+            <SelectFilter label="Fase" value={filters.stage} onChange={set("stage")} options={Object.entries(STAGE_GROUPS).map(([value, g]) => ({ value, label: g.label }))} />
+            <SelectFilter label="Prioridad" value={filters.priority} onChange={set("priority")} options={OPTIONS.priority()} />
+            <SelectFilter label="Fuente" value={filters.source} onChange={set("source")} options={OPTIONS.source()} />
+            <SelectFilter label="Empresa" value={filters.company} onChange={set("company")} options={companies.map((c) => ({ value: c, label: c }))} />
+            <SelectFilter label="Modalidad" value={filters.workplace} onChange={set("workplace")} options={OPTIONS.workplace()} />
             <SelectFilter
-              label="Referral"
+              label="Recomendación"
               value={filters.referral}
               onChange={set("referral")}
               options={[
-                { value: "yes", label: "Con referral (pedido o recibido)" },
-                { value: "received", label: "Referral recibido" },
-                { value: "no", label: "Sin referral" },
+                { value: "yes", label: "Con recomendación (pedida o recibida)" },
+                { value: "received", label: "Recomendación recibida" },
+                { value: "no", label: "Sin recomendación" },
               ]}
             />
-            <SelectFilter label="Recruiter" value={filters.recruiter} onChange={set("recruiter")} options={[{ value: "yes", label: "Con recruiter" }, { value: "no", label: "Sin recruiter" }]} />
+            <SelectFilter label="Reclutador" value={filters.recruiter} onChange={set("recruiter")} options={[{ value: "yes", label: "Con reclutador" }, { value: "no", label: "Sin reclutador" }]} />
             <label className="block space-y-1">
-              <span className="font-mono text-[0.7rem] text-slate-500">Location</span>
+              <span className="font-mono text-[0.7rem] text-slate-500">Ubicación</span>
               <input value={filters.location} onChange={(e) => set("location")(e.target.value)} className="field py-1.5" />
             </label>
             <label className="block space-y-1">

@@ -28,7 +28,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
     <div className="space-y-8">
       <div>
         <Link href="/admin/job-search/contacts" className="font-mono text-xs text-slate-600 hover:text-carbon">
-          ← contacts
+          ← contactos
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -40,7 +40,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
               <Badge tone="dark">{CONTACT_KIND_LABEL[c.kind]}</Badge>
               <Badge>{CONTACT_STATUS_LABEL[c.status]}</Badge>
               <span className="font-mono text-xs text-slate-500">
-                última interacción {relativeDay(c.lastInteractionAt, s.today)} · follow-up {relativeDay(c.nextFollowUpAt, s.today)}
+                última interacción {relativeDay(c.lastInteractionAt, s.today)} · seguimiento {relativeDay(c.nextFollowUpAt, s.today)}
               </span>
             </p>
           </div>
@@ -52,7 +52,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
             ) : null}
             {c.email ? (
               <a href={mailto(c.email, "", `Hola ${c.name.split(" ")[0]},\n\n`)} className="btn-ghost">
-                Email
+                Escribir
               </a>
             ) : null}
             {c.phone ? (
@@ -64,7 +64,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Section title="Registrar interacción">
           <ActionForm action={logInteractionAction} hidden={{ contactId: c.id }} submitLabel="Registrar" className="panel space-y-4 p-4">
             <Select
@@ -78,11 +78,11 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
             />
             <TextField name="summary" label="Resumen" required placeholder="Mensaje por LinkedIn sobre la vacante de…" />
             {linkedOpps.length ? <Select name="opportunityId" label="Oportunidad" options={[{ value: "", label: "—" }, ...linkedOpps]} /> : null}
-            <Checkbox name="createFollowUp" label={`Crear follow-up a ${s.goal.followupRecruiterDays} días laborables (solo salientes)`} defaultChecked />
+            <Checkbox name="createFollowUp" label={`Crear un seguimiento a ${s.goal.followupRecruiterDays} días laborables (solo si escribes tú)`} defaultChecked />
           </ActionForm>
         </Section>
 
-        <Section title="Oportunidades y referrals">
+        <Section title="Oportunidades y recomendaciones">
           {c.opportunities.length ? (
             <ul className="panel divide-y divide-slate-200">
               {c.opportunities.map(({ opportunity: o, role }) => (
@@ -104,7 +104,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
             <ul className="panel divide-y divide-slate-200">
               {c.referrals.map((r) => (
                 <li key={r.id} className="px-4 py-2.5 text-sm">
-                  Referral para{" "}
+                  Recomendación para{" "}
                   <Link href={`/admin/job-search/opportunities/${r.opportunityId}?tab=contacts`} className="link">
                     {r.opportunity.title}
                   </Link>{" "}
@@ -116,7 +116,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         </Section>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Section title="Tareas">
           <TaskList tasks={tasks} today={s.today} />
           <details className="panel p-4">
@@ -138,7 +138,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       <details className="panel p-4">
         <summary className="cursor-pointer font-medium text-carbon">Editar contacto</summary>
         <div className="mt-6">
-          <ActionForm action={saveContactAction} hidden={{ id: c.id }} className="grid gap-4 md:grid-cols-3">
+          <ActionForm action={saveContactAction} hidden={{ id: c.id }} className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <TextField name="name" label="Nombre" defaultValue={c.name} required />
             <TextField name="companyName" label="Empresa" defaultValue={c.company?.name} />
             <TextField name="title" label="Cargo" defaultValue={c.title} />
@@ -146,10 +146,10 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
             <Select name="status" label="Estado" options={OPTIONS.contactStatus()} defaultValue={c.status} />
             <TextField name="relationship" label="Relación" defaultValue={c.relationship} />
             <TextField name="linkedinUrl" label="LinkedIn" type="url" defaultValue={c.linkedinUrl} />
-            <TextField name="email" label="Email" type="email" defaultValue={c.email} />
+            <TextField name="email" label="Correo" type="email" defaultValue={c.email} />
             <TextField name="phone" label="Teléfono" type="tel" defaultValue={c.phone} />
             <TextField name="lastInteractionAt" label="Última interacción" type="date" defaultValue={c.lastInteractionAt} />
-            <TextField name="nextFollowUpAt" label="Próximo follow-up" type="date" defaultValue={c.nextFollowUpAt} />
+            <TextField name="nextFollowUpAt" label="Próximo seguimiento" type="date" defaultValue={c.nextFollowUpAt} />
             <div className="md:col-span-3">
               <TextArea name="notes" label="Notas del contacto" rows={3} defaultValue={c.notes} />
             </div>

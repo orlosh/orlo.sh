@@ -30,27 +30,27 @@ const fromFive = (v: number, max: number) => Math.round((v / 5) * max);
 
 function roleFit(o: OppSnap, ctx: ScoreContext): ScoreFactor {
   const max = 15;
-  if (o.roleFit !== null) return { key: "role", label: "Role fit", max, points: fromFive(o.roleFit, max), reason: `Valoración manual ${o.roleFit}/5.` };
-  if (!ctx.goal.targetRoles.length) return { key: "role", label: "Role fit", max, points: half(max), reason: "Sin roles objetivo en los ajustes." };
+  if (o.roleFit !== null) return { key: "role", label: "Encaje con el rol", max, points: fromFive(o.roleFit, max), reason: `Valoración manual ${o.roleFit}/5.` };
+  if (!ctx.goal.targetRoles.length) return { key: "role", label: "Encaje con el rol", max, points: half(max), reason: "Sin roles objetivo en los ajustes." };
   const title = o.title.toLowerCase();
   const hit = ctx.goal.targetRoles.find((r) => title.includes(r.toLowerCase()));
-  if (hit) return { key: "role", label: "Role fit", max, points: max, reason: `El título contiene "${hit}".` };
+  if (hit) return { key: "role", label: "Encaje con el rol", max, points: max, reason: `El título contiene "${hit}".` };
   const words = ctx.goal.targetRoles.flatMap((r) => r.toLowerCase().split(/\s+/)).filter((w) => w.length > 3);
   const partial = words.filter((w) => title.includes(w));
-  if (partial.length) return { key: "role", label: "Role fit", max, points: Math.round(max * 0.6), reason: `Coincidencia parcial con el rol objetivo (${partial.join(", ")}).` };
-  return { key: "role", label: "Role fit", max, points: Math.round(max * 0.2), reason: "El título no coincide con ningún rol objetivo." };
+  if (partial.length) return { key: "role", label: "Encaje con el rol", max, points: Math.round(max * 0.6), reason: `Coincidencia parcial con el rol objetivo (${partial.join(", ")}).` };
+  return { key: "role", label: "Encaje con el rol", max, points: Math.round(max * 0.2), reason: "El título no coincide con ningún rol objetivo." };
 }
 
 function skillMatch(_: OppSnap, ctx: ScoreContext): ScoreFactor {
   const max = 20;
-  if (!ctx.analysis || !ctx.match) return { key: "skills", label: "Skill match", max, points: half(max), reason: "Sin Job Description para analizar." };
+  if (!ctx.analysis || !ctx.match) return { key: "skills", label: "Habilidades", max, points: half(max), reason: "Sin descripción de la oferta para analizar." };
   const cov = ctx.match.requiredCoverage;
-  if (cov === null) return { key: "skills", label: "Skill match", max, points: half(max), reason: "La JD no menciona habilidades reconocibles." };
+  if (cov === null) return { key: "skills", label: "Habilidades", max, points: half(max), reason: "La oferta no menciona habilidades reconocibles." };
   const total = ctx.analysis.requiredSkills.length;
   const matched = total - ctx.match.missingRequired.length;
   return {
     key: "skills",
-    label: "Skill match",
+    label: "Habilidades",
     max,
     points: Math.round(cov * max),
     reason: `${matched}/${total} habilidades requeridas con evidencia${ctx.match.missingRequired.length ? `; faltan ${ctx.match.missingRequired.slice(0, 3).join(", ")}` : ""}.`,
@@ -59,27 +59,27 @@ function skillMatch(_: OppSnap, ctx: ScoreContext): ScoreFactor {
 
 function seniorityFit(o: OppSnap, ctx: ScoreContext): ScoreFactor {
   const max = 10;
-  if (o.seniorityFit !== null) return { key: "seniority", label: "Seniority fit", max, points: fromFive(o.seniorityFit, max), reason: `Valoración manual ${o.seniorityFit}/5.` };
+  if (o.seniorityFit !== null) return { key: "seniority", label: "Nivel", max, points: fromFive(o.seniorityFit, max), reason: `Valoración manual ${o.seniorityFit}/5.` };
   const jd = ctx.analysis?.seniority;
   const target = ctx.goal.targetSeniority;
-  if (!jd || !target) return { key: "seniority", label: "Seniority fit", max, points: half(max), reason: !target ? "Sin seniority objetivo en los ajustes." : "La JD no indica seniority." };
+  if (!jd || !target) return { key: "seniority", label: "Nivel", max, points: half(max), reason: !target ? "Sin nivel objetivo en los ajustes." : "La oferta no indica nivel." };
   const d = seniorityDistance(jd.value, target);
   const points = d === 0 ? max : d === 1 ? Math.round(max * 0.6) : 0;
-  return { key: "seniority", label: "Seniority fit", max, points, reason: `Oferta ${jd.value}${jd.inferred ? " (inferido de los años pedidos)" : ""} vs objetivo ${target}.` };
+  return { key: "seniority", label: "Nivel", max, points, reason: `Oferta ${jd.value}${jd.inferred ? " (inferido de los años pedidos)" : ""} vs objetivo ${target}.` };
 }
 
 function salaryFit(o: OppSnap, ctx: ScoreContext): ScoreFactor {
   const max = 10;
   const min = ctx.goal.minSalary;
   const offered = o.salaryMax ?? o.salaryMin;
-  if (!min) return { key: "salary", label: "Salary fit", max, points: half(max), reason: "Sin salario mínimo en los ajustes." };
-  if (!offered) return { key: "salary", label: "Salary fit", max, points: half(max), reason: "La oferta no publica salario." };
+  if (!min) return { key: "salary", label: "Salario", max, points: half(max), reason: "Sin salario mínimo en los ajustes." };
+  if (!offered) return { key: "salary", label: "Salario", max, points: half(max), reason: "La oferta no publica salario." };
   if (o.salaryCurrency && ctx.goal.currency && o.salaryCurrency.toUpperCase() !== ctx.goal.currency.toUpperCase()) {
-    return { key: "salary", label: "Salary fit", max, points: half(max), reason: `Moneda distinta (${o.salaryCurrency} vs ${ctx.goal.currency}): no se compara.` };
+    return { key: "salary", label: "Salario", max, points: half(max), reason: `Moneda distinta (${o.salaryCurrency} vs ${ctx.goal.currency}): no se compara.` };
   }
-  if (offered >= min) return { key: "salary", label: "Salary fit", max, points: max, reason: `Hasta ${offered.toLocaleString("es-ES")} ≥ mínimo ${min.toLocaleString("es-ES")}.` };
-  if (offered >= min * 0.9) return { key: "salary", label: "Salary fit", max, points: half(max), reason: `Hasta ${offered.toLocaleString("es-ES")}: menos de un 10 % por debajo del mínimo.` };
-  return { key: "salary", label: "Salary fit", max, points: 0, reason: `Hasta ${offered.toLocaleString("es-ES")} < mínimo ${min.toLocaleString("es-ES")}.` };
+  if (offered >= min) return { key: "salary", label: "Salario", max, points: max, reason: `Hasta ${offered.toLocaleString("es-ES")} ≥ mínimo ${min.toLocaleString("es-ES")}.` };
+  if (offered >= min * 0.9) return { key: "salary", label: "Salario", max, points: half(max), reason: `Hasta ${offered.toLocaleString("es-ES")}: menos de un 10 % por debajo del mínimo.` };
+  return { key: "salary", label: "Salario", max, points: 0, reason: `Hasta ${offered.toLocaleString("es-ES")} < mínimo ${min.toLocaleString("es-ES")}.` };
 }
 
 function locationFit(o: OppSnap, ctx: ScoreContext): ScoreFactor {
@@ -87,36 +87,36 @@ function locationFit(o: OppSnap, ctx: ScoreContext): ScoreFactor {
   const prefs = ctx.goal.preferredWorkplaces;
   const loc = (o.location ?? "").toLowerCase();
   const locHit = ctx.goal.preferredLocations.find((l) => l && loc.includes(l.toLowerCase()));
-  if (!o.workplace && !o.location) return { key: "location", label: "Location fit", max, points: half(max), reason: "Sin modalidad ni ubicación." };
-  if (!prefs.length && !ctx.goal.preferredLocations.length) return { key: "location", label: "Location fit", max, points: half(max), reason: "Sin preferencias de ubicación en los ajustes." };
+  if (!o.workplace && !o.location) return { key: "location", label: "Ubicación", max, points: half(max), reason: "Sin modalidad ni ubicación." };
+  if (!prefs.length && !ctx.goal.preferredLocations.length) return { key: "location", label: "Ubicación", max, points: half(max), reason: "Sin preferencias de ubicación en los ajustes." };
   if (o.workplace && prefs.includes(o.workplace)) {
-    return { key: "location", label: "Location fit", max, points: max, reason: `${WORKPLACE_LABEL[o.workplace]} está entre tus preferencias.` };
+    return { key: "location", label: "Ubicación", max, points: max, reason: `${WORKPLACE_LABEL[o.workplace]} está entre tus preferencias.` };
   }
-  if (locHit) return { key: "location", label: "Location fit", max, points: Math.round(max * 0.7), reason: `Ubicación preferida (${locHit}).` };
-  return { key: "location", label: "Location fit", max, points: Math.round(max * 0.2), reason: `${o.workplace ? WORKPLACE_LABEL[o.workplace] : "Modalidad desconocida"}${o.location ? ` · ${o.location}` : ""}: fuera de tus preferencias.` };
+  if (locHit) return { key: "location", label: "Ubicación", max, points: Math.round(max * 0.7), reason: `Ubicación preferida (${locHit}).` };
+  return { key: "location", label: "Ubicación", max, points: Math.round(max * 0.2), reason: `${o.workplace ? WORKPLACE_LABEL[o.workplace] : "Modalidad desconocida"}${o.location ? ` · ${o.location}` : ""}: fuera de tus preferencias.` };
 }
 
 function companyInterest(o: OppSnap): ScoreFactor {
   const max = 10;
-  if (o.companyInterest !== null) return { key: "company", label: "Company interest", max, points: fromFive(o.companyInterest, max), reason: `Interés ${o.companyInterest}/5${o.companyTier ? ` · Tier ${o.companyTier.toUpperCase()}` : ""}.` };
+  if (o.companyInterest !== null) return { key: "company", label: "Interés por la empresa", max, points: fromFive(o.companyInterest, max), reason: `Interés ${o.companyInterest}/5${o.companyTier ? ` · categoría ${o.companyTier.toUpperCase()}` : ""}.` };
   if (o.companyTier) {
     const points = { a: max, b: Math.round(max * 0.6), c: Math.round(max * 0.3) }[o.companyTier];
-    return { key: "company", label: "Company interest", max, points, reason: `Empresa Tier ${o.companyTier.toUpperCase()}.` };
+    return { key: "company", label: "Interés por la empresa", max, points, reason: `Empresa de categoría ${o.companyTier.toUpperCase()}.` };
   }
-  return { key: "company", label: "Company interest", max, points: half(max), reason: "Empresa sin tier ni interés asignado." };
+  return { key: "company", label: "Interés por la empresa", max, points: half(max), reason: "Empresa sin categoría ni interés asignado." };
 }
 
 function referral(o: OppSnap): ScoreFactor {
   const max = 10;
-  if (o.referral === "received" || o.source === "referral") return { key: "referral", label: "Referral", max, points: max, reason: "Referral recibido." };
-  if (o.referral === "requested") return { key: "referral", label: "Referral", max, points: half(max), reason: "Referral solicitado, pendiente." };
-  return { key: "referral", label: "Referral", max, points: 0, reason: "Sin referral." };
+  if (o.referral === "received" || o.source === "referral") return { key: "referral", label: "Recomendación", max, points: max, reason: "Recomendación recibida." };
+  if (o.referral === "requested") return { key: "referral", label: "Recomendación", max, points: half(max), reason: "Recomendación pedida, pendiente." };
+  return { key: "referral", label: "Recomendación", max, points: 0, reason: "Sin recomendación." };
 }
 
 function recruiter(o: OppSnap): ScoreFactor {
   const max = 5;
-  if (o.hasRecruiter || o.source === "recruiter") return { key: "recruiter", label: "Recruiter connection", max, points: max, reason: "Hay un recruiter o hiring manager vinculado." };
-  return { key: "recruiter", label: "Recruiter connection", max, points: 0, reason: "Sin recruiter vinculado." };
+  if (o.hasRecruiter || o.source === "recruiter") return { key: "recruiter", label: "Contacto en el proceso", max, points: max, reason: "Hay un reclutador o responsable de contratación vinculado." };
+  return { key: "recruiter", label: "Contacto en el proceso", max, points: 0, reason: "Sin reclutador vinculado." };
 }
 
 function freshness(o: OppSnap, ctx: ScoreContext): ScoreFactor {
@@ -131,7 +131,7 @@ function history(o: OppSnap, ctx: ScoreContext): ScoreFactor {
   const max = 5;
   const row = ctx.sourceRow;
   if (!row || row.applications < MIN_SAMPLE || row.conversion.rate === null || ctx.overallInterviewRate === null) {
-    return { key: "history", label: "Resultados históricos", max, points: 3, reason: "Insufficient data: menos de 5 candidaturas por esta fuente." };
+    return { key: "history", label: "Resultados históricos", max, points: 3, reason: "Datos insuficientes: menos de 5 candidaturas por esta fuente." };
   }
   const r = row.conversion.rate;
   const overall = ctx.overallInterviewRate;

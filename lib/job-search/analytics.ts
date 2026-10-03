@@ -6,7 +6,7 @@ import { isClosed, maxRank, RANK, rank } from "./stages";
 
 /**
  * Métricas de la búsqueda. Todo se calcula a partir del historial real; cuando una muestra es
- * demasiado pequeña para sacar conclusiones, se devuelve null y la UI muestra "Insufficient data".
+ * demasiado pequeña para sacar conclusiones, se devuelve null y la UI muestra "Datos insuficientes".
  */
 
 /** Tamaño mínimo de muestra para comparar tasas entre grupos. */
@@ -84,13 +84,13 @@ export function factsFor(s: Snapshot): OppFacts[] {
 /* ----------------------------------------------------------------- funnel */
 
 export const FUNNEL_STEPS = [
-  ["opportunities", "Opportunities"],
-  ["qualified", "Qualified"],
-  ["applied", "Applied"],
-  ["responses", "Responses"],
-  ["interviews", "Interviews"],
-  ["finals", "Finals"],
-  ["offers", "Offers"],
+  ["opportunities", "Oportunidades"],
+  ["qualified", "Cualificadas"],
+  ["applied", "Aplicadas"],
+  ["responses", "Respuestas"],
+  ["interviews", "Entrevistas"],
+  ["finals", "Finales"],
+  ["offers", "Ofertas"],
 ] as const;
 export type FunnelKey = (typeof FUNNEL_STEPS)[number][0];
 
@@ -113,12 +113,12 @@ export function conversions(facts: OppFacts[]) {
   const referred = applied.filter((f) => f.referral);
   const cold = applied.filter((f) => f.cold);
   return [
-    { key: "app_response", label: "Application → Response", ...rate(applied.filter((f) => f.responded).length, applied.length) },
-    { key: "app_interview", label: "Application → Interview", ...rate(applied.filter((f) => f.interviewed).length, applied.length) },
-    { key: "interview_final", label: "Interview → Final", ...rate(interviewed.filter((f) => f.final).length, interviewed.length) },
-    { key: "final_offer", label: "Final → Offer", ...rate(finals.filter((f) => f.offer).length, finals.length) },
-    { key: "referral_interview", label: "Referral → Interview", ...rate(referred.filter((f) => f.interviewed).length, referred.length) },
-    { key: "cold_interview", label: "Cold application → Interview", ...rate(cold.filter((f) => f.interviewed).length, cold.length) },
+    { key: "app_response", label: "Candidatura → respuesta", ...rate(applied.filter((f) => f.responded).length, applied.length) },
+    { key: "app_interview", label: "Candidatura → entrevista", ...rate(applied.filter((f) => f.interviewed).length, applied.length) },
+    { key: "interview_final", label: "Entrevista → final", ...rate(interviewed.filter((f) => f.final).length, interviewed.length) },
+    { key: "final_offer", label: "Final → oferta", ...rate(finals.filter((f) => f.offer).length, finals.length) },
+    { key: "referral_interview", label: "Con recomendación → entrevista", ...rate(referred.filter((f) => f.interviewed).length, referred.length) },
+    { key: "cold_interview", label: "Candidatura en frío → entrevista", ...rate(cold.filter((f) => f.interviewed).length, cold.length) },
   ];
 }
 
@@ -234,23 +234,23 @@ export function bottleneck(s: Snapshot, facts: OppFacts[]): Bottleneck {
 
   if (f.opportunities < 5) {
     return {
-      stage: "Opportunities",
-      reason: `Solo ${f.opportunities} oportunidades registradas: no hay suficiente top of funnel.`,
-      action: "Añade al menos 10 oportunidades al inbox hoy y cualifica las mejores.",
+      stage: "Oportunidades",
+      reason: `Solo ${f.opportunities} oportunidades registradas: faltan oportunidades al principio del embudo.`,
+      action: "Añade hoy al menos 10 oportunidades a la bandeja y cualifica las mejores.",
     };
   }
   if (appliedThisWeek < s.goal.weeklyApplicationTarget && f.applied < 10) {
     return {
-      stage: "Applied",
+      stage: "Candidaturas",
       reason: `${appliedThisWeek} candidaturas en los últimos 7 días frente a un objetivo de ${s.goal.weeklyApplicationTarget}/semana${pipelineReady ? `; ${pipelineReady} oportunidades abiertas sin aplicar` : ""}.`,
-      action: pipelineReady ? "Aplica hoy a las oportunidades Ready to Apply / Qualified de mayor score." : "Busca y cualifica nuevas oportunidades.",
+      action: pipelineReady ? "Aplica hoy a las oportunidades listas o cualificadas con mejor puntuación." : "Busca y cualifica nuevas oportunidades.",
     };
   }
   const checks: [string, number, number, number, string][] = [
-    ["Responses", f.responses, f.applied, 0.15, "Revisa el targeting y el CV: la mayoría de candidaturas no reciben respuesta. Prioriza referrals."],
-    ["Interviews", f.interviews, f.responses, 0.4, "Las respuestas no se convierten en entrevistas: prepara el pitch del recruiter screen y alinea expectativas."],
-    ["Finals", f.finals, f.interviews, 0.3, "Se cae en entrevistas intermedias: refuerza la preparación técnica y las historias STAR."],
-    ["Offers", f.offers, f.finals, 0.3, "Se cae en finales: revisa feedback, preparación de cierre y preguntas a la empresa."],
+    ["Respuestas", f.responses, f.applied, 0.15, "Revisa a qué ofertas apuntas y el CV: la mayoría de candidaturas no reciben respuesta. Prioriza las recomendaciones."],
+    ["Entrevistas", f.interviews, f.responses, 0.4, "Las respuestas no se convierten en entrevistas: prepara la presentación para la llamada con reclutador y alinea expectativas."],
+    ["Finales", f.finals, f.interviews, 0.3, "Se cae en entrevistas intermedias: refuerza la preparación técnica y las historias STAR."],
+    ["Ofertas", f.offers, f.finals, 0.3, "Se cae en finales: revisa el feedback, la preparación del cierre y las preguntas a la empresa."],
   ];
   for (const [stage, num, den, ref, action] of checks) {
     if (den >= MIN_SAMPLE && num / den < ref) {
@@ -259,7 +259,7 @@ export function bottleneck(s: Snapshot, facts: OppFacts[]): Bottleneck {
     if (den < MIN_SAMPLE) break;
   }
   if (f.applied >= MIN_SAMPLE && f.responses < MIN_SAMPLE) {
-    return { stage: "Responses", reason: `${f.responses} respuestas de ${f.applied} candidaturas: aún pocas para medir más abajo.`, action: "Haz follow-up de las candidaturas pendientes y pide referrals." };
+    return { stage: "Respuestas", reason: `${f.responses} respuestas de ${f.applied} candidaturas: aún pocas para medir más abajo.`, action: "Haz seguimiento de las candidaturas pendientes y pide recomendaciones." };
   }
   return null;
 }
@@ -276,8 +276,8 @@ export function insights(s: Snapshot, facts: OppFacts[]): Insight[] {
   if (w.applications >= MIN_SAMPLE && wo.applications >= MIN_SAMPLE && w.interview.rate !== null && wo.interview.rate !== null) {
     const better = w.interview.rate > wo.interview.rate;
     out.push({
-      text: better ? "Los referrals convierten mejor que las candidaturas sin referral." : "Las candidaturas sin referral convierten igual o mejor que con referral.",
-      evidence: `Entrevista: ${pct(w.interview)} con referral (${w.interview.num}/${w.interview.den}) vs ${pct(wo.interview)} sin (${wo.interview.num}/${wo.interview.den}).`,
+      text: better ? "Las recomendaciones convierten mejor que las candidaturas sin recomendación." : "Las candidaturas sin recomendación convierten igual o mejor que con ella.",
+      evidence: `Entrevista: ${pct(w.interview)} con recomendación (${w.interview.num}/${w.interview.den}) vs ${pct(wo.interview)} sin (${wo.interview.num}/${wo.interview.den}).`,
     });
   }
 
@@ -312,7 +312,7 @@ export function insights(s: Snapshot, facts: OppFacts[]): Insight[] {
   if (cold.length >= MIN_SAMPLE * 2 && (coldInterview.rate ?? 0) < 0.05) {
     out.push({
       text: "Las candidaturas en frío casi no generan entrevistas.",
-      evidence: `${coldInterview.num}/${coldInterview.den} (${pct(coldInterview)}). Mueve tiempo de aplicar a networking y referrals.`,
+      evidence: `${coldInterview.num}/${coldInterview.den} (${pct(coldInterview)}). Dedica más tiempo a contactos y recomendaciones.`,
     });
   }
   return out;
@@ -358,13 +358,13 @@ export function weekMetrics(s: Snapshot, weekStart: string): WeekMetrics {
 }
 
 export const WEEK_METRIC_LABEL: Record<keyof WeekMetrics, string> = {
-  applications: "Applications",
-  contacts: "Contacts",
-  referralsRequested: "Referrals solicitados",
-  referralsReceived: "Referrals recibidos",
-  followUps: "Follow-ups",
-  interviews: "Interviews",
-  responses: "Responses",
-  finals: "Finals",
-  offers: "Offers",
+  applications: "Candidaturas",
+  contacts: "Contactos",
+  referralsRequested: "Recomendaciones pedidas",
+  referralsReceived: "Recomendaciones recibidas",
+  followUps: "Seguimientos",
+  interviews: "Entrevistas",
+  responses: "Respuestas",
+  finals: "Finales",
+  offers: "Ofertas",
 };

@@ -37,7 +37,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       </form>
       {r && !total ? <Empty>Sin resultados.</Empty> : null}
       {r ? (
-        <div className="grid gap-8 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <Group title="Oportunidades" count={r.opportunities.length}>
             {r.opportunities.map((o) => (
               <li key={o.id}>

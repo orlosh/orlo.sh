@@ -2,7 +2,7 @@ import { BarRow, Empty, PageHeader, Section, Table, td } from "@/components/admi
 import { conversions, FUNNEL_STEPS, funnel, insights, MIN_SAMPLE, pct, referralAnalytics, type Rate, timeAnalytics } from "@/lib/job-search/analytics";
 import { getWorkspace } from "@/lib/job-search/server";
 
-export const metadata = { title: "Analytics" };
+export const metadata = { title: "Métricas" };
 
 /** Una tasa con su muestra; por debajo del mínimo se marca como insuficiente en vez de ocultarla. */
 function RateCell({ r }: { r: Rate }) {
@@ -14,7 +14,7 @@ function RateCell({ r }: { r: Rate }) {
   );
 }
 
-const days = (d: { avg: number | null; n: number }) => (d.avg === null ? "Insufficient data" : `${d.avg} d (n=${d.n})`);
+const days = (d: { avg: number | null; n: number }) => (d.avg === null ? "Datos insuficientes" : `${d.avg} d (${d.n} casos)`);
 
 export default async function AnalyticsPage() {
   const { snapshot: s, engine } = await getWorkspace();
@@ -26,10 +26,10 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-12">
-      <PageHeader title="Analytics" description={`Calculado sobre el historial real de estados. Las tasas con menos de ${MIN_SAMPLE} casos se marcan como muestra pequeña.`} />
+      <PageHeader title="Métricas" description={`Calculadas sobre el historial real de estados. Las tasas con menos de ${MIN_SAMPLE} casos se marcan como muestra pequeña.`} />
 
-      <div className="grid gap-10 lg:grid-cols-2">
-        <Section title="Funnel">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+        <Section title="Embudo">
           <div className="panel space-y-2 p-4">
             {FUNNEL_STEPS.map(([key, label], i) => {
               const prev = i ? f[FUNNEL_STEPS[i - 1][0]] : null;
@@ -37,7 +37,7 @@ export default async function AnalyticsPage() {
             })}
           </div>
           <p className="text-xs text-slate-600">
-            Response = la empresa contestó tras aplicar (screen, entrevista o rechazo). Interview = llegó a Interview o tuvo una entrevista que no era el screen.
+            Respuesta: la empresa contestó tras aplicar (llamada, entrevista o descarte). Entrevista: pasó de la llamada inicial con el reclutador.
           </p>
         </Section>
         <Section title="Conversiones">
@@ -54,9 +54,9 @@ export default async function AnalyticsPage() {
         </Section>
       </div>
 
-      <Section title="Source performance">
+      <Section title="Rendimiento por fuente">
         {engine.sources.length ? (
-          <Table head={["Source", "Opportunities", "Applications", "Responses", "Interviews", "Offers", "Conversion (interview / application)"]} minWidth="48rem">
+          <Table head={["Fuente", "Oportunidades", "Candidaturas", "Respuestas", "Entrevistas", "Ofertas", "Conversión (entrevistas / candidaturas)"]} minWidth="48rem">
             {engine.sources.map((r) => (
               <tr key={r.source}>
                 <td className={td}>{r.label}</td>
@@ -72,21 +72,21 @@ export default async function AnalyticsPage() {
             ))}
           </Table>
         ) : (
-          <Empty>Insufficient data</Empty>
+          <Empty>Datos insuficientes</Empty>
         )}
       </Section>
 
-      <div className="grid gap-10 lg:grid-cols-2">
-        <Section title="Referral analytics">
-          <Table head={["", "Con referral", "Sin referral"]} minWidth="24rem">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+        <Section title="Con y sin recomendación">
+          <Table head={["", "Con recomendación", "Sin recomendación"]} minWidth="24rem">
             <tr>
-              <td className={td}>Applications</td>
+              <td className={td}>Candidaturas</td>
               <td className={td}>{ref.withReferral.applications}</td>
               <td className={td}>{ref.withoutReferral.applications}</td>
             </tr>
             {(["response", "interview", "final", "offer"] as const).map((k) => (
               <tr key={k}>
-                <td className={td}>{{ response: "Response rate", interview: "Interview rate", final: "Final rate", offer: "Offer rate" }[k]}</td>
+                <td className={td}>{{ response: "Tasa de respuesta", interview: "Tasa de entrevista", final: "Tasa de final", offer: "Tasa de oferta" }[k]}</td>
                 <td className={td}>
                   <RateCell r={ref.withReferral[k]} />
                 </td>
@@ -97,13 +97,13 @@ export default async function AnalyticsPage() {
             ))}
           </Table>
         </Section>
-        <Section title="Time analytics">
+        <Section title="Tiempos">
           <Table head={["Tramo", "Media"]} minWidth="20rem">
             {[
-              ["Application → Response", time.appToResponse],
-              ["Application → Interview", time.appToInterview],
-              ["Interview → Final", time.interviewToFinal],
-              ["Final → Offer", time.finalToOffer],
+              ["Candidatura → respuesta", time.appToResponse],
+              ["Candidatura → entrevista", time.appToInterview],
+              ["Entrevista → final", time.interviewToFinal],
+              ["Final → oferta", time.finalToOffer],
               ["Duración total del proceso (cerrados)", time.totalProcess],
             ].map(([label, d]) => (
               <tr key={label as string}>
@@ -117,19 +117,19 @@ export default async function AnalyticsPage() {
         </Section>
       </div>
 
-      <div className="grid gap-10 lg:grid-cols-2">
-        <Section title="Average days in stage">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+        <Section title="Días medios en cada estado">
           {time.daysInStage.length ? (
             <div className="panel space-y-2 p-4">
               {time.daysInStage.map((d) => (
-                <BarRow key={d.status} label={d.label} value={d.avg ?? 0} max={Math.max(...time.daysInStage.map((x) => x.avg ?? 0), 1)} detail={`d · n=${d.n}`} />
+                <BarRow key={d.status} label={d.label} value={d.avg ?? 0} max={Math.max(...time.daysInStage.map((x) => x.avg ?? 0), 1)} detail={`d · ${d.n} casos`} />
               ))}
             </div>
           ) : (
-            <Empty>Insufficient data</Empty>
+            <Empty>Datos insuficientes</Empty>
           )}
         </Section>
-        <Section title="Insights">
+        <Section title="Conclusiones">
           {found.length ? (
             <ul className="panel divide-y divide-slate-200">
               {found.map((i) => (
@@ -140,7 +140,7 @@ export default async function AnalyticsPage() {
               ))}
             </ul>
           ) : (
-            <Empty>Insufficient data</Empty>
+            <Empty>Datos insuficientes</Empty>
           )}
         </Section>
       </div>

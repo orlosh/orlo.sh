@@ -6,7 +6,8 @@ import { Select, TextArea, TextField } from "@/components/admin/fields";
 import { ActionButton } from "@/components/admin/job-search/ActionButton";
 import { Notes, TaskFields, TaskList, Timeline } from "@/components/admin/job-search/lists";
 import { OpportunityForm } from "@/components/admin/job-search/OpportunityForm";
-import { Badge, Empty, Muted, PlainText, PriorityTag, Section, StatusBadge, Table, Tabs, td } from "@/components/admin/job-search/ui";
+import { StatusSelect } from "@/components/admin/job-search/StatusSelect";
+import { Badge, Empty, Muted, PlainText, PriorityTag, Section, Table, Tabs, td } from "@/components/admin/job-search/ui";
 import {
   changeStatusAction,
   deleteOpportunityAction,
@@ -45,15 +46,16 @@ import { editorId } from "@/lib/admin/params";
 export const metadata = { title: "Oportunidad" };
 
 const TABS = [
-  ["overview", "Overview"],
-  ["jd", "Job Description"],
-  ["match", "Match"],
-  ["contacts", "Contacts"],
-  ["activity", "Activity"],
-  ["notes", "Notes"],
-  ["documents", "Documents"],
-  ["interviews", "Interviews"],
-  ["tasks", "Tasks"],
+  ["overview", "Resumen"],
+  ["jd", "Oferta"],
+  ["match", "Encaje"],
+  ["contacts", "Contactos"],
+  ["interviews", "Entrevistas"],
+  ["tasks", "Tareas"],
+  ["notes", "Notas"],
+  ["documents", "Documentos"],
+  ["activity", "Actividad"],
+  ["edit", "Editar"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -90,7 +92,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
     return (
       <div className="max-w-4xl">
         <Link href="/admin/job-search/opportunities" className="font-mono text-xs text-slate-600 hover:text-carbon">
-          ← opportunities
+          ← oportunidades
         </Link>
         <h1 className="page-title mt-3">Nueva oportunidad</h1>
         <div className="mt-8">
@@ -126,13 +128,33 @@ export default async function OpportunityPage({ params, searchParams }: { params
     tasks: openTasks,
   };
 
+  const transitions = quickTransitions(opp.status);
+  const nextTasks = opp.tasks.filter((t) => t.status === "open").slice(0, 4);
+  const facts: [string, string][] = [
+    ["Fuente", SOURCE_LABEL[opp.source]],
+    ["Salario", opp.salaryMin || opp.salaryMax ? `${[money(opp.salaryMin), money(opp.salaryMax)].filter(Boolean).join(" – ")} ${opp.salaryCurrency ?? ""}${opp.salaryText ? ` · ${opp.salaryText}` : ""}` : (opp.salaryText ?? "—")],
+    ["Publicada", formatDay(opp.postedAt)],
+    ["Guardada", formatDay(opp.discoveredAt)],
+    ["Aplicada", formatDay(opp.appliedAt)],
+    ["Recomendación", opp.referrals.length ? REFERRAL_STATUS_LABEL[opp.referrals[0].status] : "—"],
+    ...(opp.outcome ? ([["Resultado", OUTCOME_LABEL[opp.outcome]]] as [string, string][]) : []),
+    ...(opp.discardReason ? ([["Motivo del descarte", opp.discardReason]] as [string, string][]) : []),
+  ];
+  // Fechas que piden acción, en una sola franja bajo la cabecera.
+  const due = [
+    opp.nextAction ? `Próxima acción: ${opp.nextAction}${opp.nextActionAt ? ` (${relativeDay(opp.nextActionAt, s.today)})` : ""}` : null,
+    opp.nextFollowUpAt ? `Seguimiento ${relativeDay(opp.nextFollowUpAt, s.today)}` : null,
+    opp.deadline && !opp.appliedAt ? `Cierre de candidaturas ${relativeDay(opp.deadline, s.today)}` : null,
+    opp.offerDeadline ? `Responder a la oferta ${relativeDay(opp.offerDeadline, s.today)}` : null,
+  ].filter(Boolean);
+
   return (
     <div className="space-y-6">
       <div>
         <Link href="/admin/job-search/opportunities" className="font-mono text-xs text-slate-600 hover:text-carbon">
-          ← opportunities
+          ← oportunidades
         </Link>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="mt-3 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="page-title break-words">{opp.title}</h1>
             <p className="mt-1 text-slate-700">
@@ -145,107 +167,102 @@ export default async function OpportunityPage({ params, searchParams }: { params
               )}
               {opp.location ? <span className="text-slate-500"> · {opp.location}</span> : null}
               {opp.workplace ? <span className="text-slate-500"> · {WORKPLACE_LABEL[opp.workplace]}</span> : null}
-            </p>
-            <p className="mt-2 flex flex-wrap items-center gap-3">
-              <StatusBadge status={opp.status} />
-              <PriorityTag priority={opp.priority} />
-              <Muted>{daysInStage} d en fase</Muted>
               {opp.url ? (
-                <a href={opp.url} target="_blank" rel="noopener noreferrer" className="link text-sm">
-                  Ver oferta ↗
-                </a>
+                <>
+                  {" · "}
+                  <a href={opp.url} target="_blank" rel="noopener noreferrer" className="link">
+                    ver oferta ↗
+                  </a>
+                </>
               ) : null}
             </p>
           </div>
-          <div className="panel px-4 py-3 text-right">
-            <p className="label">Score</p>
-            <p className="font-mono text-3xl text-carbon">{score?.score ?? "—"}</p>
-            {score?.overridden ? <p className="font-mono text-[0.7rem] text-slate-500">override · calculado {score.computed}</p> : null}
-          </div>
+          <Link href={`${base}?tab=overview#puntuacion`} className="shrink-0 rounded-lg border border-slate-200 bg-white px-4 py-2 text-right hover:border-slate-300">
+            <span className="block font-mono text-2xl text-carbon">{score?.score ?? "—"}</span>
+            <span className="block text-[0.7rem] text-slate-500">{score?.overridden ? `manual · calculada ${score.computed}` : "puntuación"}</span>
+          </Link>
         </div>
-      </div>
 
-      {/* Cambio de estado rápido: la acción más frecuente, accesible también desde el móvil. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {quickTransitions(opp.status).map((to) => (
-          <ActionButton key={to} action={changeStatusAction} hidden={{ ids: id, status: to }} label={`→ ${STATUS_LABEL[to]}`} />
-        ))}
-        <details className="relative">
-          <summary className="btn-ghost cursor-pointer list-none">Otro estado…</summary>
-          <div className="panel absolute z-20 mt-2 w-72 p-4 shadow-lg">
-            <ActionForm action={changeStatusAction} hidden={{ ids: id }} submitLabel="Cambiar">
-              <Select name="status" label="Estado" options={OPTIONS.status()} defaultValue={opp.status} />
-            </ActionForm>
-          </div>
-        </details>
+        {/* Estado y siguientes pasos: lo que más se toca, siempre a mano (también en el móvil). */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <StatusSelect key={opp.status} id={id} status={opp.status} />
+          <span className="flex flex-wrap items-center gap-1">
+            {transitions.slice(0, 3).map((to, i) => (
+              <ActionButton key={to} action={changeStatusAction} hidden={{ ids: id, status: to }} label={`${STATUS_LABEL[to]} →`} variant={i === 0 ? "ghost" : "link"} />
+            ))}
+          </span>
+          <span className="flex items-center gap-3 text-xs text-slate-500">
+            <PriorityTag priority={opp.priority} />
+            <span>{daysInStage} d en este estado</span>
+          </span>
+        </div>
+        {due.length ? (
+          <p className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">{due.join(" · ")}</p>
+        ) : null}
       </div>
 
       <Tabs current={tab} tabs={TABS.map(([key, l]) => ({ key, label: l, href: key === "overview" ? base : `${base}?tab=${key}`, count: counts[key] }))} />
 
       {tab === "overview" ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Section title="Resumen">
-            <dl className="panel grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm">
-              {[
-                ["Fuente", SOURCE_LABEL[opp.source]],
-                ["Salario", opp.salaryMin || opp.salaryMax ? `${[money(opp.salaryMin), money(opp.salaryMax)].filter(Boolean).join(" – ")} ${opp.salaryCurrency ?? ""}${opp.salaryText ? ` · ${opp.salaryText}` : ""}` : (opp.salaryText ?? "—")],
-                ["Publicada", formatDay(opp.postedAt)],
-                ["Descubierta", formatDay(opp.discoveredAt)],
-                ["Aplicada", formatDay(opp.appliedAt)],
-                ["Deadline", opp.deadline ? `${formatDay(opp.deadline)} (${relativeDay(opp.deadline, s.today)})` : "—"],
-                ["Próxima acción", opp.nextAction ? `${opp.nextAction}${opp.nextActionAt ? ` · ${relativeDay(opp.nextActionAt, s.today)}` : ""}` : "—"],
-                ["Próximo follow-up", opp.nextFollowUpAt ? `${formatDay(opp.nextFollowUpAt)} (${relativeDay(opp.nextFollowUpAt, s.today)})` : "—"],
-                ["Referral", opp.referrals.length ? REFERRAL_STATUS_LABEL[opp.referrals[0].status] : "—"],
-                ["Resultado", opp.outcome ? OUTCOME_LABEL[opp.outcome] : "—"],
-                ...(opp.offerDeadline ? [["Responder oferta", `${formatDay(opp.offerDeadline)} (${relativeDay(opp.offerDeadline, s.today)})`]] : []),
-                ...(opp.discardReason ? [["Motivo descarte", opp.discardReason]] : []),
-              ].map(([k, v]) => (
-                <div key={k}>
-                  <dt className="font-mono text-[0.7rem] text-slate-500">{k}</dt>
-                  <dd className="mt-0.5 text-slate-800">{v}</dd>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="space-y-8">
+            <Section title="Datos">
+              <dl className="panel grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm">
+                {facts.map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-slate-500">{k}</dt>
+                    <dd className="mt-0.5 text-slate-800">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {opp.notes ? (
+                <div className="panel p-4">
+                  <PlainText>{opp.notes}</PlainText>
                 </div>
-              ))}
-            </dl>
-            {opp.notes ? (
-              <div className="panel p-4">
-                <PlainText>{opp.notes}</PlainText>
-              </div>
-            ) : null}
-          </Section>
+              ) : null}
+            </Section>
+            <Section title="Tareas abiertas" action={<Link href={`${base}?tab=tasks`} className="font-mono text-xs text-slate-600 hover:text-carbon">todas →</Link>}>
+              <TaskList tasks={nextTasks} today={s.today} />
+            </Section>
+            <Section title="Últimos movimientos" action={<Link href={`${base}?tab=activity`} className="font-mono text-xs text-slate-600 hover:text-carbon">actividad →</Link>}>
+              <Timeline activities={opp.activities.slice(0, 5)} timezone={tz} today={s.today} />
+            </Section>
+          </div>
 
-          <Section title="Por qué este score">
+          <Section title="Por qué esta puntuación" id="puntuacion">
             {score ? (
               <div className="panel divide-y divide-slate-200">
                 {score.overridden ? (
                   <p className="px-4 py-3 text-sm text-slate-800">
-                    Override manual: <span className="font-mono">{score.score}</span> — {score.overrideReason}
+                    Puntuación manual: <span className="font-mono">{score.score}</span> — {score.overrideReason}
                   </p>
                 ) : null}
                 {score.factors.map((f) => (
-                  <div key={f.key} className="grid grid-cols-[1fr_auto] gap-x-3 px-4 py-2.5">
-                    <p className="text-sm text-carbon">{f.label}</p>
-                    <p className="font-mono text-sm text-carbon">
-                      {f.points}
-                      <span className="text-slate-500">/{f.max}</span>
-                    </p>
-                    <p className="col-span-2 text-xs text-slate-600">{f.reason}</p>
+                  <div key={f.key} className="px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-carbon">{f.label}</p>
+                      <p className="font-mono text-xs text-slate-600">
+                        {f.points}/{f.max}
+                      </p>
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full bg-slate-100">
+                      <div className="h-1 rounded-full bg-slate-500" style={{ width: `${(f.points / f.max) * 100}%` }} />
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-600">{f.reason}</p>
                   </div>
                 ))}
-                <p className="px-4 py-2.5 text-right font-mono text-sm text-carbon">Calculado: {score.computed}/100</p>
+                <p className="px-4 py-2.5 text-right font-mono text-sm text-carbon">Calculada: {score.computed}/100</p>
               </div>
             ) : null}
           </Section>
+        </div>
+      ) : null}
 
-          <div className="lg:col-span-2">
-            <details className="panel p-4">
-              <summary className="cursor-pointer font-medium text-carbon">Editar oportunidad</summary>
-              <div className="mt-6">
-                <OpportunityForm row={opp} companyName={opp.company?.name} companies={companies.map((c) => c.name)} />
-              </div>
-              <div className="mt-8 border-t border-slate-200 pt-6">
-                <DeleteButton action={deleteOpportunityAction} hidden={{ id }} confirmText="¿Eliminar la oportunidad con toda su actividad, tareas y entrevistas? No se puede deshacer." />
-              </div>
-            </details>
+      {tab === "edit" ? (
+        <div className="max-w-4xl space-y-8">
+          <OpportunityForm row={opp} companyName={opp.company?.name} companies={companies.map((c) => c.name)} />
+          <div className="border-t border-slate-200 pt-6">
+            <DeleteButton action={deleteOpportunityAction} hidden={{ id }} confirmText="¿Eliminar la oportunidad con toda su actividad, tareas y entrevistas? No se puede deshacer." />
           </div>
         </div>
       ) : null}
@@ -253,8 +270,8 @@ export default async function OpportunityPage({ params, searchParams }: { params
       {tab === "jd" || tab === "match" ? <AnalysisTabs tab={tab} opp={opp} profile={profile} today={s.today} cvDocs={cvDocs} cvParam={sp.cv} base={base} /> : null}
 
       {tab === "contacts" ? (
-        <div className="grid gap-8 lg:grid-cols-2">
-          <Section title="Contactos del proceso">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <Section title="Personas del proceso">
             {opp.contacts.length ? (
               <ul className="panel divide-y divide-slate-200">
                 {opp.contacts.map(({ contact, role }) => (
@@ -275,7 +292,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
                           className="btn-ghost"
                           href={mailto(contact.email, `Seguimiento · ${opp.title}`, `Hola ${contact.name.split(" ")[0]},\n\nQuería hacer seguimiento de mi candidatura para ${opp.title}.\n\nGracias,`)}
                         >
-                          Email
+                          Escribir
                         </a>
                       ) : null}
                       <ActionButton action={unlinkContactAction} hidden={{ opportunityId: id, contactId: contact.id }} variant="link" label="Quitar" />
@@ -300,13 +317,13 @@ export default async function OpportunityPage({ params, searchParams }: { params
                   <Select name="kind" label="Tipo" options={OPTIONS.contactKind()} defaultValue="recruiter" />
                   <TextField name="title" label="Cargo" />
                   <TextField name="linkedinUrl" label="LinkedIn" type="url" />
-                  <TextField name="email" label="Email" type="email" />
+                  <TextField name="email" label="Correo" type="email" />
                 </ActionForm>
               </div>
             </details>
           </Section>
 
-          <Section title="Referrals">
+          <Section title="Recomendaciones">
             {opp.referrals.length ? (
               <ul className="panel divide-y divide-slate-200">
                 {opp.referrals.map((r) => (
@@ -314,35 +331,35 @@ export default async function OpportunityPage({ params, searchParams }: { params
                     <div>
                       <p className="text-sm text-carbon">{r.contact?.name ?? "Sin contacto asignado"}</p>
                       <p className="text-xs text-slate-600">
-                        {REFERRAL_STATUS_LABEL[r.status]} · pedido {relativeDay(r.requestedAt, s.today)}
-                        {r.receivedAt ? ` · recibido ${relativeDay(r.receivedAt, s.today)}` : ""}
+                        {REFERRAL_STATUS_LABEL[r.status]} · pedida {relativeDay(r.requestedAt, s.today)}
+                        {r.receivedAt ? ` · recibida ${relativeDay(r.receivedAt, s.today)}` : ""}
                       </p>
                     </div>
                     {r.status === "requested" ? (
                       <div className="flex gap-1">
-                        <ActionButton action={updateReferralAction} hidden={{ id: r.id, status: "received" }} label="Recibido" />
+                        <ActionButton action={updateReferralAction} hidden={{ id: r.id, status: "received" }} label="Recibida" />
                         <ActionButton action={updateReferralAction} hidden={{ id: r.id, status: "no_response" }} variant="link" label="Sin respuesta" />
-                        <ActionButton action={updateReferralAction} hidden={{ id: r.id, status: "declined" }} variant="link" label="Rechazado" />
+                        <ActionButton action={updateReferralAction} hidden={{ id: r.id, status: "declined" }} variant="link" label="Rechazada" />
                       </div>
                     ) : null}
                   </li>
                 ))}
               </ul>
             ) : (
-              <Empty>Sin referrals.</Empty>
+              <Empty>Sin recomendaciones.</Empty>
             )}
-            <ActionForm action={requestReferralAction} hidden={{ opportunityId: id }} submitLabel="Pedir referral" className="panel space-y-4 p-4">
+            <ActionForm action={requestReferralAction} hidden={{ opportunityId: id }} submitLabel="Pedir recomendación" className="panel space-y-4 p-4">
               <Select name="contactId" label="A quién" options={[{ value: "", label: "— Sin especificar —" }, ...options.contacts]} />
               <TextField name="notes" label="Notas" />
-              <p className="text-xs text-slate-600">Crea la actividad y un follow-up a {s.goal.followupReferralDays} días laborables.</p>
+              <p className="text-xs text-slate-600">Registra la actividad y crea un seguimiento a {s.goal.followupReferralDays} días laborables.</p>
             </ActionForm>
           </Section>
         </div>
       ) : null}
 
       {tab === "activity" ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <Section title="Timeline">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <Section title="Historial">
             <Timeline activities={opp.activities} timezone={tz} today={s.today} />
           </Section>
           <Section title="Historial de estados">
@@ -384,7 +401,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
               ))}
             </Table>
           ) : (
-            <Empty>No has registrado qué documentos enviaste.</Empty>
+            <Empty>Aún no has registrado qué documentos enviaste.</Empty>
           )}
           {docOptions.length ? (
             <ActionForm action={linkDocumentAction} hidden={{ opportunityId: id }} submitLabel="Registrar" className="panel grid gap-4 p-4 sm:grid-cols-2">
@@ -395,7 +412,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
             <p className="text-sm text-slate-600">
               Crea primero tus documentos en{" "}
               <Link href="/admin/job-search/documents" className="link">
-                Documents
+                Documentos
               </Link>
               .
             </p>
@@ -404,7 +421,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
       ) : null}
 
       {tab === "interviews" ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <Section title="Entrevistas">
             {opp.interviews.length ? (
               <ul className="panel divide-y divide-slate-200">
@@ -427,7 +444,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
                         rel="noopener noreferrer"
                         href={googleCalendarUrl({ id: i.id, title: `${INTERVIEW_KIND_LABEL[i.kind]} · ${label}`, start: i.scheduledAt, minutes: i.durationMinutes ?? 45, description: i.topics ?? "", location: i.meetingUrl })}
                       >
-                        Calendar ↗
+                        Calendario ↗
                       </a>
                     ) : null}
                   </li>
@@ -453,14 +470,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
                 <TextField name="interviewerName" label="Entrevistador (nombre)" />
               </div>
               <TextArea name="topics" label="Temas" rows={2} />
-              <p className="text-xs text-slate-600">Crea la actividad, una tarea de preparación y otra de thank-you en 24 h.</p>
+              <p className="text-xs text-slate-600">Registra la actividad y crea una tarea de preparación y otra de agradecimiento a las 24 h.</p>
             </ActionForm>
           </Section>
         </div>
       ) : null}
 
       {tab === "tasks" ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <Section title="Tareas">
             <TaskList tasks={opp.tasks} today={s.today} />
           </Section>
@@ -511,7 +528,7 @@ function AnalysisTabs({
   if (!result) {
     return (
       <Empty>
-        Pega la Job Description en <Link href={base} className="link">Overview → Editar</Link> para analizarla. El análisis es local y determinista: no se envía a ningún servicio.
+        Pega el texto de la oferta en <Link href={`${base}?tab=edit`} className="link">Editar</Link> para analizarla. El análisis se hace aquí mismo: el texto no se envía a ningún servicio.
       </Empty>
     );
   }
@@ -519,40 +536,40 @@ function AnalysisTabs({
 
   if (tab === "jd") {
     return (
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Section title="Extraído de la JD">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <Section title="Qué pide la oferta">
           <dl className="panel grid gap-4 p-4 text-sm sm:grid-cols-2">
             <div>
-              <dt className="font-mono text-[0.7rem] text-slate-500">Role</dt>
+              <dt className="font-mono text-[0.7rem] text-slate-500">Puesto</dt>
               <dd className="text-slate-800">{a.role ?? "—"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[0.7rem] text-slate-500">Seniority</dt>
+              <dt className="font-mono text-[0.7rem] text-slate-500">Nivel</dt>
               <dd className="text-slate-800">{a.seniority ? `${SENIORITY_LABEL[a.seniority.value]}${a.seniority.inferred ? " (inferido de los años)" : ""}` : "—"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[0.7rem] text-slate-500">Experience</dt>
+              <dt className="font-mono text-[0.7rem] text-slate-500">Experiencia</dt>
               <dd className="text-slate-800">{a.experience.minYears !== null ? `${a.experience.minYears}+ años` : "—"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[0.7rem] text-slate-500">Salary</dt>
+              <dt className="font-mono text-[0.7rem] text-slate-500">Salario</dt>
               <dd className="text-slate-800">{a.salary ? a.salary.raw : "—"}</dd>
             </div>
             <div>
-              <dt className="font-mono text-[0.7rem] text-slate-500">Location</dt>
+              <dt className="font-mono text-[0.7rem] text-slate-500">Ubicación</dt>
               <dd className="text-slate-800">{[a.location, a.workplace ? WORKPLACE_LABEL[a.workplace] : null].filter(Boolean).join(" · ") || "—"}</dd>
             </div>
           </dl>
-          {a.unstructured ? <p className="text-xs text-slate-600">La JD no tiene secciones reconocibles: todas las habilidades se tratan como requeridas.</p> : null}
-          <h3 className="label pt-2">Required skills</h3>
+          {a.unstructured ? <p className="text-xs text-slate-600">La oferta no tiene secciones reconocibles: todas las habilidades se tratan como requeridas.</p> : null}
+          <h3 className="label pt-2">Habilidades requeridas</h3>
           <Chips items={a.requiredSkills} tone="dark" />
-          <h3 className="label pt-2">Preferred skills</h3>
+          <h3 className="label pt-2">Habilidades deseables</h3>
           <Chips items={a.preferredSkills} />
-          <h3 className="label pt-2">Tools</h3>
+          <h3 className="label pt-2">Herramientas</h3>
           <Chips items={a.tools} tone="muted" />
-          <h3 className="label pt-2">Keywords</h3>
+          <h3 className="label pt-2">Palabras clave</h3>
           <Chips items={a.keywords} tone="muted" />
-          <h3 className="label pt-2">Responsibilities</h3>
+          <h3 className="label pt-2">Responsabilidades</h3>
           {a.responsibilities.length ? (
             <ul className="list-disc space-y-1 pl-5 text-sm text-slate-800">
               {a.responsibilities.map((r) => (
@@ -573,7 +590,7 @@ function AnalysisTabs({
             </>
           ) : null}
         </Section>
-        <Section title="Texto original">
+        <Section title="Texto de la oferta">
           <div className="panel max-h-[48rem] overflow-y-auto p-4">
             <PlainText>{opp.description}</PlainText>
           </div>
@@ -589,29 +606,29 @@ function AnalysisTabs({
 
   return (
     <div className="space-y-10">
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Section title={`Matched skills · ${match.matchedSkills.length}`}>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <Section title={`Habilidades que encajan · ${match.matchedSkills.length}`}>
           {match.matchedSkills.length ? (
             <ul className="panel divide-y divide-slate-200">
               {match.matchedSkills.map((m) => (
                 <li key={m.skill} className="px-4 py-2">
                   <span className="text-sm text-carbon">{m.skill}</span>
-                  <span className="block text-xs text-slate-600">Evidencia: {m.sources.join(" · ")}</span>
+                  <span className="block text-xs text-slate-600">Respaldo: {m.sources.join(" · ")}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <Empty>Ninguna habilidad de la JD aparece en tu perfil.</Empty>
+            <Empty>Ninguna habilidad de la oferta aparece en tu perfil.</Empty>
           )}
         </Section>
-        <Section title="Missing skills y gaps">
+        <Section title="Lo que falta">
           <div className="panel space-y-3 p-4">
             <div>
-              <p className="font-mono text-[0.7rem] text-slate-500">Requeridas sin evidencia</p>
+              <p className="text-xs text-slate-500">Requeridas sin respaldo en tu perfil</p>
               <Chips items={match.missingRequired} tone="dark" />
             </div>
             <div>
-              <p className="font-mono text-[0.7rem] text-slate-500">Deseables sin evidencia</p>
+              <p className="text-xs text-slate-500">Deseables sin respaldo</p>
               <Chips items={match.missingPreferred} />
             </div>
             {match.gaps.length ? (
@@ -628,8 +645,8 @@ function AnalysisTabs({
         </Section>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Section title="Relevant experience">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <Section title="Experiencia relevante">
           {match.relevantExperience.length ? (
             <ul className="panel divide-y divide-slate-200">
               {match.relevantExperience.map((r, i) => (
@@ -642,10 +659,10 @@ function AnalysisTabs({
               ))}
             </ul>
           ) : (
-            <Empty>Ningún logro de tu experiencia menciona lo que pide la JD.</Empty>
+            <Empty>Ningún logro de tu experiencia menciona lo que pide la oferta.</Empty>
           )}
         </Section>
-        <Section title="Keywords y recomendaciones">
+        <Section title="Palabras clave y recomendaciones">
           <div className="panel space-y-4 p-4">
             <ul className="flex flex-wrap gap-1.5">
               {match.keywords.map((k) => (
@@ -667,7 +684,7 @@ function AnalysisTabs({
       </div>
 
       <Section
-        title="CV matching"
+        title="Comparación con tu CV"
         action={
           cvDocs.length > 1 ? (
             <form className="flex items-center gap-2">
@@ -697,15 +714,15 @@ function AnalysisTabs({
             <>
               No hay ningún CV con texto en{" "}
               <Link href="/admin/job-search/documents" className="link">
-                Documents
+                Documentos
               </Link>
               : se compara con tu experiencia registrada.
             </>
           )}{" "}
           Las sugerencias solo reordenan o destacan contenido que ya existe.
         </p>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <CvBlock title="Experiencia a enfatizar" empty="Ninguna línea del CV cubre dos o más términos de la JD.">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <CvBlock title="Experiencia a enfatizar" empty="Ninguna línea del CV cubre dos o más términos de la oferta.">
             {cvm.emphasize.map((e) => (
               <li key={e.line} className="px-4 py-2.5">
                 <p className="text-sm text-slate-800">{e.line}</p>
@@ -729,21 +746,21 @@ function AnalysisTabs({
               </li>
             ))}
           </CvBlock>
-          <CvBlock title="Contenido poco relevante para esta JD" empty="Todo el CV toca algún término de la JD.">
+          <CvBlock title="Poco relevante para esta oferta" empty="Todo el CV toca algún término de la oferta.">
             {cvm.irrelevant.map((l) => (
               <li key={l} className="px-4 py-2.5 text-sm text-slate-700">
                 {l}
               </li>
             ))}
           </CvBlock>
-          <CvBlock title="Keywords que puedes añadir (con evidencia)" empty="El CV ya incluye todas las keywords que tu perfil respalda.">
+          <CvBlock title="Palabras clave que puedes añadir (con respaldo)" empty="El CV ya incluye todas las palabras clave que tu perfil respalda.">
             {cvm.keywordsToAdd.map((k) => (
               <li key={k.keyword} className="px-4 py-2.5 text-sm text-slate-800">
-                {k.keyword} <span className="text-xs text-slate-500">· evidencia: {k.evidence}</span>
+                {k.keyword} <span className="text-xs text-slate-500">· respaldo: {k.evidence}</span>
               </li>
             ))}
           </CvBlock>
-          <CvBlock title="Proyectos relevantes" empty="Ningún proyecto usa lo que pide la JD.">
+          <CvBlock title="Proyectos relevantes" empty="Ningún proyecto usa lo que pide la oferta.">
             {cvm.projects.map((p) => (
               <li key={p.title} className="px-4 py-2.5 text-sm text-slate-800">
                 {p.title} <span className="text-xs text-slate-500">· {p.terms.join(", ")}</span>
@@ -753,7 +770,7 @@ function AnalysisTabs({
         </div>
         {cvm.keywordsMissing.length ? (
           <p className="text-sm text-slate-700">
-            <span className="font-medium text-carbon">Sin evidencia en tu perfil (no añadir):</span> {cvm.keywordsMissing.join(", ")}.
+            <span className="font-medium text-carbon">Sin respaldo en tu perfil (no las añadas):</span> {cvm.keywordsMissing.join(", ")}.
           </p>
         ) : null}
       </Section>

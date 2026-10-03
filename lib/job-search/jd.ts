@@ -495,6 +495,9 @@ export type CandidateProfile = {
   targetRoles: string[];
 };
 
+/** Respaldo que procede de la sección Stack del perfil (no de una experiencia o un proyecto). */
+const STACK = "Stack";
+
 export type Evidence = { skill: string; sources: string[] };
 
 export type ProfileMatch = {
@@ -541,7 +544,7 @@ export function compareProfile(analysis: JobAnalysis, profile: CandidateProfile,
 
   const evidenceFor = (skill: string): string[] => {
     const sources: string[] = [];
-    if (declared.has(skillKey(skill))) sources.push("stack");
+    if (declared.has(skillKey(skill))) sources.push(STACK);
     const term = termFor(skill);
     if (!term) return sources;
     for (const e of profile.experiences) {
@@ -603,7 +606,7 @@ export function compareProfile(analysis: JobAnalysis, profile: CandidateProfile,
   if (missingRequired.length) {
     gaps.push(`Sin evidencia en tu perfil de: ${missingRequired.join(", ")} (requerido).`);
     recommendations.push(
-      `No añadas ${missingRequired.slice(0, 3).join(", ")} al CV si no lo has usado. Si sí lo has usado, regístralo primero en Stack o Experiencia para que el matching lo detecte.`,
+      `No añadas ${missingRequired.slice(0, 3).join(", ")} al CV si no lo has usado. Si sí lo has usado, regístralo primero en Stack o Experiencia para que la comparación lo detecte.`,
     );
   }
   if (missingPreferred.length) gaps.push(`Deseables sin evidencia: ${missingPreferred.join(", ")}.`);
@@ -614,21 +617,21 @@ export function compareProfile(analysis: JobAnalysis, profile: CandidateProfile,
   if (analysis.seniority && profile.targetSeniority && seniorityDistance(analysis.seniority.value, profile.targetSeniority) >= 2) {
     gaps.push(`Seniority de la oferta (${analysis.seniority.value}) lejos de tu objetivo (${profile.targetSeniority}).`);
   }
-  const top = matchedSkills.filter((m) => m.sources.some((s) => s !== "stack")).slice(0, 4);
+  const top = matchedSkills.filter((m) => m.sources.some((s) => s !== STACK)).slice(0, 4);
   if (top.length) {
     recommendations.push(
-      `Destaca ${top.map((m) => m.skill).join(", ")}: lo piden y tienes evidencia concreta (${[...new Set(top.flatMap((m) => m.sources.filter((s) => s !== "stack")))].slice(0, 3).join("; ")}).`,
+      `Destaca ${top.map((m) => m.skill).join(", ")}: lo piden y tienes evidencia concreta (${[...new Set(top.flatMap((m) => m.sources.filter((s) => s !== STACK)))].slice(0, 3).join("; ")}).`,
     );
   }
-  const stackOnly = matchedSkills.filter((m) => m.sources.length === 1 && m.sources[0] === "stack").map((m) => m.skill);
+  const stackOnly = matchedSkills.filter((m) => m.sources.length === 1 && m.sources[0] === STACK).map((m) => m.skill);
   if (stackOnly.length) {
     recommendations.push(
-      `${stackOnly.slice(0, 4).join(", ")} está en tu stack pero en ninguna experiencia o proyecto: si lo usaste en algún puesto, añádelo a esa experiencia.`,
+      `${stackOnly.slice(0, 4).join(", ")} está en tu Stack pero en ninguna experiencia o proyecto: si lo usaste en algún puesto, añádelo a esa experiencia.`,
     );
   }
   const missingKw = keywords.filter((k) => !k.inProfile).map((k) => k.keyword);
   if (missingKw.length) {
-    recommendations.push(`Keywords de la JD que tu perfil no menciona: ${missingKw.slice(0, 6).join(", ")}. Úsalas solo donde describan algo que hiciste.`);
+    recommendations.push(`Palabras clave de la oferta que tu perfil no menciona: ${missingKw.slice(0, 6).join(", ")}. Úsalas solo donde describan algo que hiciste.`);
   }
 
   const reqTotal = analysis.requiredSkills.length;
@@ -698,7 +701,7 @@ export function matchCv(analysis: JobAnalysis, cv: string, profile: CandidatePro
 
   const move: CvMatch["move"] = bullets
     .filter((l) => l.hits.length >= 2 && l.index > l.total / 2)
-    .map((l) => ({ line: l.text, reason: "Muy relevante para esta JD pero está en la mitad inferior del CV: súbelo." }));
+    .map((l) => ({ line: l.text, reason: "Muy relevante para esta oferta pero está en la mitad inferior del CV: súbelo." }));
 
   // Contenido real del perfil que encaja con la JD y no está en el CV.
   const cvText = cv.toLowerCase();
@@ -706,7 +709,7 @@ export function matchCv(analysis: JobAnalysis, cv: string, profile: CandidatePro
     for (const line of e.lines) {
       const hits = hitsOf(line);
       if (hits.length >= 2 && !cvText.includes(line.toLowerCase().slice(0, 40))) {
-        move.push({ line, reason: `Está en tu perfil (${e.label}) pero no en este CV y encaja con la JD.` });
+        move.push({ line, reason: `Está en tu perfil (${e.label}) pero no en este CV y encaja con la oferta.` });
       }
     }
   }
@@ -726,7 +729,7 @@ export function matchCv(analysis: JobAnalysis, cv: string, profile: CandidatePro
     if (re.some((p) => p.test(profileText))) {
       const exp = profile.experiences.find((e) => [...e.lines, ...(e.technologies ?? [])].some((l) => re.some((p) => p.test(l))));
       const proj = profile.projects.find((p) => re.some((r) => r.test(`${p.title} ${p.summary} ${p.technologies.join(" ")}`)));
-      keywordsToAdd.push({ keyword: k, evidence: exp?.label ?? (proj ? `Proyecto: ${proj.title}` : "stack") });
+      keywordsToAdd.push({ keyword: k, evidence: exp?.label ?? (proj ? `Proyecto: ${proj.title}` : STACK) });
     } else keywordsMissing.push(k);
   }
 

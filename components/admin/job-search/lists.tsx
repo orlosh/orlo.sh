@@ -38,7 +38,7 @@ export function TaskList({ tasks, today, showContext = false }: { tasks: Task[];
                   <span>{TASK_KIND_LABEL[t.kind]}</span>
                   <span>· {PRIORITY_LABEL[t.priority]}</span>
                   {t.dueDate ? <span className={overdue ? "font-semibold text-carbon" : ""}>· {overdue ? "vencida " : ""}{relativeDay(t.dueDate, today)} ({formatDay(t.dueDate)})</span> : null}
-                  {t.origin !== "manual" ? <span>· auto</span> : null}
+                  {t.origin !== "manual" ? <span>· automática</span> : null}
                   {t.status === "cancelled" ? <span>· cancelada</span> : null}
                   {showContext && t.context ? (
                     <Link href={t.context.href} className="link">

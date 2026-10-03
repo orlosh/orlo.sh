@@ -21,7 +21,7 @@ export const metadata = { title: "Entrevista" };
 /** Puntos genéricos de preparación; el checklist es editable y cada uno se marca a mano. */
 const DEFAULT_CHECKLIST = [
   "Investigar empresa, producto y noticias recientes",
-  "Releer la JD y el CV que enviaste",
+  "Releer la oferta y el CV que enviaste",
   "Pitch de 2 minutos sobre tu trayectoria",
   "Elegir 3 historias STAR para esta entrevista",
   "Preparar preguntas para la empresa",
@@ -44,7 +44,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     <div className="space-y-8">
       <div>
         <Link href="/admin/job-search/interviews" className="font-mono text-xs text-slate-600 hover:text-carbon">
-          ← interviews
+          ← entrevistas
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -92,31 +92,31 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <Section title="Interview prep">
+      <Section title="Preparación">
         <ActionForm action={saveInterviewPrepAction} hidden={{ id: i.id }} submitLabel="Guardar preparación" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="panel space-y-4 p-4">
-              <TextArea name="prepCompany" label="Company research" rows={5} defaultValue={i.prepCompany} hint="Producto, modelo de negocio, noticias, cultura, stack." />
-              <TextArea name="prepRole" label="Role research" rows={5} defaultValue={i.prepRole} />
+              <TextArea name="prepCompany" label="La empresa" rows={5} defaultValue={i.prepCompany} hint="Producto, modelo de negocio, noticias, cultura, stack." />
+              <TextArea name="prepRole" label="El puesto" rows={5} defaultValue={i.prepRole} />
               {jd ? (
                 <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-700">
-                  <p className="font-mono text-slate-500">De la JD</p>
+                  <p className="font-mono text-slate-500">De la oferta</p>
                   {jd.analysis.responsibilities.length ? <p className="mt-1">Responsabilidades: {jd.analysis.responsibilities.slice(0, 4).join(" · ")}</p> : null}
                   {jd.analysis.requiredSkills.length ? <p className="mt-1">Requisitos: {jd.analysis.requiredSkills.join(", ")}</p> : null}
                   {jd.match.missingRequired.length ? <p className="mt-1">Gaps a preparar con honestidad: {jd.match.missingRequired.join(", ")}</p> : null}
                 </div>
               ) : null}
-              <TextArea name="prepInterviewer" label="Interviewer" rows={3} defaultValue={i.prepInterviewer} hint="Rol, trayectoria, en qué se fijará." />
+              <TextArea name="prepInterviewer" label="Quién entrevista" rows={3} defaultValue={i.prepInterviewer} hint="Rol, trayectoria, en qué se fijará." />
             </div>
             <div className="panel space-y-4 p-4">
-              <TextArea name="prepQuestions" label="Expected questions" rows={5} defaultValue={i.prepQuestions} />
-              <TextArea name="prepAnswers" label="Prepared answers" rows={7} defaultValue={i.prepAnswers} />
-              <TextArea name="prepQuestionsToAsk" label="Questions to ask" rows={4} defaultValue={i.prepQuestionsToAsk} />
+              <TextArea name="prepQuestions" label="Preguntas que esperas" rows={5} defaultValue={i.prepQuestions} />
+              <TextArea name="prepAnswers" label="Respuestas preparadas" rows={7} defaultValue={i.prepAnswers} />
+              <TextArea name="prepQuestionsToAsk" label="Preguntas para la empresa" rows={4} defaultValue={i.prepQuestionsToAsk} />
             </div>
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="panel p-4">
-              <ChecklistField name="prepChecklist" label="Checklist" defaultValue={i.prepChecklist} suggestions={DEFAULT_CHECKLIST} />
+              <ChecklistField name="prepChecklist" label="Lista de preparación" defaultValue={i.prepChecklist} suggestions={DEFAULT_CHECKLIST} />
             </div>
             <div className="panel p-4">
               <fieldset className="space-y-2">
@@ -145,7 +145,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         </ActionForm>
       </Section>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section title="Tareas de esta entrevista">
           <TaskList tasks={tasks} today={s.today} />
         </Section>

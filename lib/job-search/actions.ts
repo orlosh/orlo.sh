@@ -167,7 +167,7 @@ export async function quickAddOpportunityAction(_: ActionState, fd: FormData) {
     pick(fd, ["url", "title", "companyName", "source", "priority", "status"]),
     (a, data) => m.quickAddOpportunity(db, a, data),
     {
-      success: (r) => ((r as { duplicate: boolean }).duplicate ? "Esa URL ya estaba guardada" : "Guardada en el inbox"),
+      success: (r) => ((r as { duplicate: boolean }).duplicate ? "Esa URL ya estaba guardada" : "Guardada en la bandeja"),
       // `next` puede llevar ":id" para abrir la oportunidad recién creada.
       redirectTo: next ? (r) => next.replace(":id", (r as { id: string }).id) : undefined,
     },
@@ -281,13 +281,13 @@ export async function unlinkContactAction(_: ActionState, fd: FormData) {
 
 export async function requestReferralAction(_: ActionState, fd: FormData) {
   return run("jobReferral", v.referralInput, pick(fd, ["opportunityId", "contactId", "notes"]), (a, data) => m.requestReferral(db, a, data), {
-    success: "Referral solicitado; follow-up creado",
+    success: "Recomendación pedida; seguimiento creado",
   });
 }
 
 export async function updateReferralAction(_: ActionState, fd: FormData) {
   return run("jobReferral", v.referralUpdateInput, pick(fd, ["id", "status"]), (a, data) => m.updateReferral(db, a, data), {
-    success: "Referral actualizado",
+    success: "Recomendación actualizada",
   });
 }
 

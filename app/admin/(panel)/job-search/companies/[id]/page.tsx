@@ -27,7 +27,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     <div className="space-y-8">
       <div>
         <Link href="/admin/job-search/companies" className="font-mono text-xs text-slate-600 hover:text-carbon">
-          ← companies
+          ← empresas
         </Link>
         <h1 className="page-title mt-3">{c.name}</h1>
         <p className="mt-2 flex flex-wrap items-center gap-2">
@@ -53,7 +53,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         ) : null}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section title={`Oportunidades · ${opportunities.length}`}>
           {opportunities.length ? (
             <ul className="panel divide-y divide-slate-200">
@@ -86,7 +86,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               ))}
             </ul>
           ) : (
-            <Empty>Nadie conocido aquí: busca un empleado o recruiter para pedir referral.</Empty>
+            <Empty>Nadie conocido aquí: busca a alguien de dentro o a un reclutador para pedir una recomendación.</Empty>
           )}
         </Section>
       </div>
@@ -98,9 +98,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       <details className="panel p-4">
         <summary className="cursor-pointer font-medium text-carbon">Editar empresa</summary>
         <div className="mt-6">
-          <ActionForm action={saveCompanyAction} hidden={{ id: c.id }} className="grid gap-4 md:grid-cols-3">
+          <ActionForm action={saveCompanyAction} hidden={{ id: c.id }} className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <TextField name="name" label="Nombre" defaultValue={c.name} required />
-            <Select name="tier" label="Tier" options={OPTIONS.tier("—")} defaultValue={c.tier} />
+            <Select name="tier" label="Categoría" options={OPTIONS.tier("—")} defaultValue={c.tier} />
             <Select name="interest" label="Interés" options={INTEREST} defaultValue={c.interest?.toString()} />
             <TextField name="website" label="Web" type="url" defaultValue={c.website} />
             <TextField name="careersUrl" label="Página de empleo" type="url" defaultValue={c.careersUrl} />
