@@ -35,6 +35,8 @@ export const aiSettingsInput = z.object({
   radarMaxAgeDays: int(1, 90),
   radarFrequencyDays: int(1, 30),
   timeBudgetSeconds: int(20, 800),
+  requestsPerMinute: int(1, 120),
+  modelFallback: z.boolean(),
 });
 export type AiSettingsInput = z.infer<typeof aiSettingsInput>;
 
@@ -131,6 +133,9 @@ export const listApiKeys = (db: ContentDb) =>
     })
     .from(t.aiApiKeys)
     .orderBy(asc(t.aiApiKeys.position), asc(t.aiApiKeys.createdAt));
+
+/** Estado de cada clave con cada modelo (esperas por límite, uso). */
+export const listKeyModels = (db: ContentDb) => db.select().from(t.aiKeyModels).orderBy(asc(t.aiKeyModels.model));
 
 export const listAiRuns = (db: ContentDb, limit = 40) =>
   db

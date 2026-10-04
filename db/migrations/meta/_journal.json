@@ -29,6 +29,13 @@
       "when": 1791054930118,
       "tag": "0003_ai_gemini",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791057578206,
+      "tag": "0004_ai_pacing",
+      "breakpoints": true
     }
   ]
 }

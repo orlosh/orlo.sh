@@ -33,6 +33,8 @@ export const AI_DEFAULTS: AiSettings = {
   radarFrequencyDays: 1,
   radarLastRunAt: null,
   timeBudgetSeconds: 240,
+  requestsPerMinute: 5,
+  modelFallback: true,
   createdAt: new Date(0),
   updatedAt: new Date(0),
 };
@@ -42,8 +44,19 @@ export async function getAiSettings(db: ContentDb): Promise<AiSettings> {
   return row ?? AI_DEFAULTS;
 }
 
-/** Claves activas, descifradas y en orden; las que no se pueden descifrar se omiten. */
+/**
+ * Almacén de claves en PostgreSQL. La espera por límite se guarda por clave y modelo
+ * (ai_key_models); la de clave rechazada, en la propia clave. Las claves que no se pueden
+ * descifrar se omiten.
+ */
 export function dbKeyStore(db: ContentDb, secret: string): KeyStore {
+  /** Primera vez: fila con los valores iniciales; después, los cambios (incrementos incluidos). */
+  const upsertModel = (keyId: string, model: string, first: Omit<typeof t.aiKeyModels.$inferInsert, "keyId" | "model">, update: Record<string, unknown>) =>
+    db
+      .insert(t.aiKeyModels)
+      .values({ keyId, model, ...first })
+      .onConflictDoUpdate({ target: [t.aiKeyModels.keyId, t.aiKeyModels.model], set: update });
+
   return {
     async keys() {
       const rows = await db.select().from(t.aiApiKeys).where(eq(t.aiApiKeys.enabled, true)).orderBy(asc(t.aiApiKeys.position), asc(t.aiApiKeys.createdAt));
@@ -52,17 +65,47 @@ export function dbKeyStore(db: ContentDb, secret: string): KeyStore {
         return apiKey ? [{ id: r.id, label: r.label, apiKey, cooldownUntil: r.cooldownUntil }] : [];
       });
     },
-    async success(id, at) {
+    async modelStates(model) {
+      const rows = await db.select().from(t.aiKeyModels).where(eq(t.aiKeyModels.model, model));
+      return new Map(rows.map((r) => [r.keyId, { cooldownUntil: r.cooldownUntil, lastRequestAt: r.lastRequestAt }]));
+    },
+    async reserve(keyId, model, minIntervalMs, now) {
+      // Atómico: si otra instancia acaba de reservar, este hueco va justo después del suyo.
+      const [row] = await db
+        .insert(t.aiKeyModels)
+        .values({ keyId, model, lastRequestAt: now })
+        .onConflictDoUpdate({
+          target: [t.aiKeyModels.keyId, t.aiKeyModels.model],
+          set: { lastRequestAt: sql`greatest(${t.aiKeyModels.lastRequestAt} + make_interval(secs => ${minIntervalMs / 1000}), ${now.toISOString()}::timestamptz)` },
+        })
+        .returning({ at: t.aiKeyModels.lastRequestAt });
+      return row.at ?? now;
+    },
+    async success(keyId, model, at) {
       await db
         .update(t.aiApiKeys)
         .set({ successCount: sql`${t.aiApiKeys.successCount} + 1`, lastUsedAt: at, cooldownUntil: null })
-        .where(eq(t.aiApiKeys.id, id));
+        .where(eq(t.aiApiKeys.id, keyId));
+      await upsertModel(keyId, model, { successCount: 1 }, { successCount: sql`${t.aiKeyModels.successCount} + 1`, cooldownUntil: null });
     },
-    async failure(id, error, cooldownUntil, at) {
+    async failure(keyId, model, error, until, at) {
       await db
         .update(t.aiApiKeys)
-        .set({ failureCount: sql`${t.aiApiKeys.failureCount} + 1`, lastErrorAt: at, lastError: error.slice(0, 500), cooldownUntil, lastUsedAt: at })
-        .where(eq(t.aiApiKeys.id, id));
+        .set({
+          failureCount: sql`${t.aiApiKeys.failureCount} + 1`,
+          lastErrorAt: at,
+          lastError: error.slice(0, 500),
+          lastUsedAt: at,
+          ...(until.key !== undefined ? { cooldownUntil: until.key } : {}),
+        })
+        .where(eq(t.aiApiKeys.id, keyId));
+      const cooldown = until.model !== undefined ? { cooldownUntil: until.model } : {};
+      await upsertModel(
+        keyId,
+        model,
+        { failureCount: 1, lastError: error.slice(0, 500), lastErrorAt: at, ...cooldown },
+        { failureCount: sql`${t.aiKeyModels.failureCount} + 1`, lastError: error.slice(0, 500), lastErrorAt: at, ...cooldown },
+      );
     },
   };
 }
@@ -72,10 +115,22 @@ export async function logRun(db: ContentDb, e: RunEntry) {
 }
 
 /** Cliente listo para usar, o error claro si la IA está desactivada en el panel. */
-export async function aiContext(db: ContentDb, secret: string, { fetchImpl = fetch, now = () => new Date() } = {}) {
+export async function aiContext(
+  db: ContentDb,
+  secret: string,
+  { fetchImpl = fetch, now = () => new Date(), sleep }: { fetchImpl?: typeof fetch; now?: () => Date; sleep?: (ms: number) => Promise<void> } = {},
+) {
   const settings = await getAiSettings(db);
   if (!settings.enabled) throw new AiError("disabled", "La IA está desactivada. Actívala en Ajustes → IA.");
-  const gemini = createGemini({ fetch: fetchImpl, store: dbKeyStore(db, secret), log: (e) => logRun(db, e), now });
+  const gemini = createGemini({
+    fetch: fetchImpl,
+    store: dbKeyStore(db, secret),
+    log: (e) => logRun(db, e),
+    now,
+    sleep,
+    minIntervalMs: Math.ceil(60_000 / settings.requestsPerMinute),
+    fallbacks: settings.modelFallback && settings.modelLight !== settings.modelDefault ? { [settings.modelDefault]: settings.modelLight } : {},
+  });
   return { db, settings, gemini, now, fetchImpl };
 }
 export type AiCtx = Awaited<ReturnType<typeof aiContext>>;

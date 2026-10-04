@@ -41,12 +41,13 @@ export type VerifiedMatch = Sc.FitMatch & {
 };
 
 /** Evaluación de encaje con citas verificadas. La comparte el radar. */
-export async function evaluateFit(ctx: AiCtx, cand: CandidateCtx, job: string, model: string, feature = "match"): Promise<VerifiedMatch> {
+export async function evaluateFit(ctx: AiCtx, cand: CandidateCtx, job: string, model: string, feature = "match", maxWaitMs?: number): Promise<VerifiedMatch> {
   if (!cand.hasCv) throw new AiError("bad_request", "No hay CV con texto ni experiencia registrada con la que comparar. Pega tu CV en Documentos.");
-  const { data: m } = await ctx.gemini.generateJson(
+  const { data: m, result } = await ctx.gemini.generateJson(
     {
       feature,
       model,
+      maxWaitMs,
       system: SYSTEM,
       temperature: 0.1,
       prompt: [
@@ -64,7 +65,8 @@ export async function evaluateFit(ctx: AiCtx, cand: CandidateCtx, job: string, m
     ...m,
     strengths,
     verifiedRatio: strengths.length ? strengths.filter((s) => s.verified).length / strengths.length : null,
-    model,
+    // El que respondió de verdad (puede ser el de respaldo).
+    model: result.model,
     cvName: cand.cvName,
     at: ctx.now().toISOString(),
   };

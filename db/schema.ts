@@ -814,10 +814,15 @@ export const aiSettings = pgTable(
     radarLastRunAt: timestamp("radar_last_run_at", { withTimezone: true }),
     /** Tiempo máximo de trabajo por ejecución del radar (la función tiene su propio límite). */
     timeBudgetSeconds: smallint("time_budget_seconds").notNull().default(240),
+    /** Ritmo máximo por clave y modelo: entre dos llamadas se espera al menos 60/rpm segundos. */
+    requestsPerMinute: smallint("requests_per_minute").notNull().default(5),
+    /** Si el modelo principal se agota en todas las claves, usar el ligero (cuota aparte). */
+    modelFallback: boolean("model_fallback").notNull().default(true),
     ...timestamps,
   },
   (t) => [
     check("ai_settings_singleton", sql`${t.id} = 1`),
+    check("ai_settings_rpm_range", sql`${t.requestsPerMinute} BETWEEN 1 AND 120`),
     check(
       "ai_settings_radar_ranges",
       sql`${t.radarMinMatch} BETWEEN 0 AND 100 AND ${t.radarMaxPerRun} BETWEEN 1 AND 50 AND ${t.radarMaxAgeDays} BETWEEN 1 AND 90 AND ${t.radarFrequencyDays} BETWEEN 1 AND 30 AND ${t.timeBudgetSeconds} BETWEEN 20 AND 800`,
@@ -843,6 +848,28 @@ export const aiApiKeys = pgTable("ai_api_keys", {
   cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
   ...timestamps,
 });
+
+/**
+ * Estado de cada clave con cada modelo. Google limita por proyecto y por modelo: que una clave
+ * agote el modelo principal no impide usarla con el ligero. También guarda la última llamada,
+ * para repartir el ritmo entre instancias de la función.
+ */
+export const aiKeyModels = pgTable(
+  "ai_key_models",
+  {
+    keyId: uuid("key_id")
+      .notNull()
+      .references(() => aiApiKeys.id, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    lastRequestAt: timestamp("last_request_at", { withTimezone: true }),
+    cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+    lastError: text("last_error"),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    successCount: integer("success_count").notNull().default(0),
+    failureCount: integer("failure_count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.keyId, t.model] })],
+);
 
 /** Una fila por llamada lógica a Gemini (con todos sus reintentos). */
 export const aiRuns = pgTable(

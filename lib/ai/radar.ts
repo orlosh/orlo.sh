@@ -54,6 +54,8 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
   const started = Date.now();
   const budgetMs = st.timeBudgetSeconds * 1000;
   const outOfTime = () => Date.now() - started > budgetMs;
+  // Cada llamada puede esperar a que haya cuota, pero nunca más de lo que queda de presupuesto.
+  const waitBudget = () => Math.max(0, Math.min(60_000, budgetMs - (Date.now() - started) - 30_000));
   const log: Log = [];
   const say = (msg: string) => log.push({ at: new Date().toISOString(), msg });
 
@@ -77,6 +79,7 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
       {
         feature: "radar_search",
         model: st.modelDefault,
+        maxWaitMs: waitBudget(),
         system: SYSTEM,
         search: true,
         temperature: 0.2,
@@ -147,7 +150,7 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
       const jd = [`${title}${company ? ` — ${company}` : ""}`, page.posting?.description ?? page.text].join("\n").slice(0, 20_000);
       let match;
       try {
-        match = await evaluateFit(ctx, cand, jd, st.modelLight, "radar_eval");
+        match = await evaluateFit(ctx, cand, jd, st.modelLight, "radar_eval", waitBudget());
       } catch (err) {
         say(`Error al evaluar ${lead.url}: ${(err as Error).message}`);
         // Sin cuota no tiene sentido seguir: la oferta queda pendiente para la próxima ejecución.

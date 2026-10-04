@@ -4,10 +4,14 @@ import type { JsonSchema, Spec } from "./schema";
 /**
  * Cliente de Gemini (API REST generateContent, sin SDK) con rotación de claves.
  *
- * Las claves se prueban en orden. Si una falla por límite (429), por estar rechazada
- * (401/403/clave no válida) o por un error del servidor, queda "en espera" el tiempo que
- * corresponda y se prueba la siguiente. Un error de la petición (400) o un modelo inexistente
- * (404) no rota: fallaría igual con cualquier clave.
+ * Antes de cada llamada se elige la clave que antes pueda atenderla con ese modelo: la que no
+ * esté en espera y respete el ritmo configurado (peticiones por minuto por clave y modelo). Si
+ * hay que esperar poco, se espera; si no, se prueba la siguiente clave y, al final, el modelo de
+ * respaldo (Google limita por modelo, así que el ligero suele tener cuota cuando el principal no).
+ *
+ * Un 429 o un error del servidor dejan en espera esa clave solo para ese modelo; una clave
+ * rechazada (401/403/no válida) queda en espera para todos. Un error de la petición (400) o un
+ * modelo inexistente (404) no rotan: fallarían igual con cualquier clave.
  *
  * Importante: Google aplica los límites del plan gratuito por proyecto, no por clave. Para
  * sumar cuota, cada clave debe venir de un proyecto distinto (lo explica el panel).
@@ -18,12 +22,20 @@ import type { JsonSchema, Spec } from "./schema";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export type AiKey = { id: string; label: string; apiKey: string; cooldownUntil: Date | null };
+export type ModelState = { cooldownUntil: Date | null; lastRequestAt: Date | null };
 
 export interface KeyStore {
-  /** Claves activas y descifradas, en orden de prioridad. */
+  /** Claves activas y descifradas, en orden de prioridad (con su espera a nivel de clave). */
   keys(): Promise<AiKey[]>;
-  success(id: string, at: Date): Promise<void>;
-  failure(id: string, error: string, cooldownUntil: Date | null, at: Date): Promise<void>;
+  /** Espera y última llamada de cada clave con un modelo concreto. */
+  modelStates(model: string): Promise<Map<string, ModelState>>;
+  /**
+   * Reserva el siguiente hueco de la clave con ese modelo respetando el intervalo mínimo y
+   * devuelve cuándo empieza. Es atómico en la base de datos: dos instancias no se pisan.
+   */
+  reserve(keyId: string, model: string, minIntervalMs: number, now: Date): Promise<Date>;
+  success(keyId: string, model: string, at: Date): Promise<void>;
+  failure(keyId: string, model: string, error: string, until: { key?: Date | null; model?: Date | null }, at: Date): Promise<void>;
 }
 
 export type RunEntry = {
@@ -52,6 +64,10 @@ export type GenerateRequest = {
   schema?: JsonSchema;
   temperature?: number;
   maxOutputTokens?: number;
+  /** Cuánto se puede esperar como mucho a que una clave esté disponible (por defecto, 60 s). */
+  maxWaitMs?: number;
+  /** No pasar al modelo de respaldo aunque el pedido esté agotado. */
+  noFallback?: boolean;
 };
 
 export type Source = { uri: string; title: string | null };
@@ -93,6 +109,8 @@ export type Failure = {
   cooldownUntil: Date | null;
   message: string;
   kind: AiErrorKind;
+  /** "key": la clave no sirve para nada (rechazada); "model": solo para este modelo. */
+  scope: "key" | "model";
 };
 
 /** "34s" / "1.5s" → milisegundos. */
@@ -119,17 +137,17 @@ export function classifyFailure(status: number, body: ErrorBody | null, now: Dat
   if (status === 429) {
     // Cuota diaria agotada: la clave no vuelve a servir hasta el reinicio del día en el Pacífico.
     if (quotaIds.some((q) => /PerDay/i.test(q))) {
-      return { rotate: true, cooldownUntil: nextPacificMidnight(now), message: `Cuota diaria agotada (${message})`, kind: "exhausted" };
+      return { rotate: true, cooldownUntil: nextPacificMidnight(now), message: `Cuota diaria agotada (${message})`, kind: "exhausted", scope: "model" };
     }
-    return { rotate: true, cooldownUntil: new Date(now.getTime() + Math.max(retryDelay ?? 60_000, 15_000)), message: `Límite alcanzado (${message})`, kind: "exhausted" };
+    return { rotate: true, cooldownUntil: new Date(now.getTime() + Math.max(retryDelay ?? 60_000, 5_000)), message: `Límite alcanzado (${message})`, kind: "exhausted", scope: "model" };
   }
   if (status === 401 || status === 403 || keyInvalid) {
-    return { rotate: true, cooldownUntil: new Date(now.getTime() + 6 * 3_600_000), message: `Clave rechazada (${message})`, kind: "exhausted" };
+    return { rotate: true, cooldownUntil: new Date(now.getTime() + 6 * 3_600_000), message: `Clave rechazada (${message})`, kind: "exhausted", scope: "key" };
   }
-  if (status === 404) return { rotate: false, cooldownUntil: null, message: `Modelo no disponible: ${message}`, kind: "model" };
-  if (status === 400) return { rotate: false, cooldownUntil: null, message, kind: "bad_request" };
+  if (status === 404) return { rotate: false, cooldownUntil: null, message: `Modelo no disponible: ${message}`, kind: "model", scope: "model" };
+  if (status === 400) return { rotate: false, cooldownUntil: null, message, kind: "bad_request", scope: "model" };
   // 5xx, 0 (red) y cualquier otro: problema transitorio del servicio.
-  return { rotate: true, cooldownUntil: new Date(now.getTime() + 20_000), message: `Servicio no disponible (${message})`, kind: "exhausted" };
+  return { rotate: true, cooldownUntil: new Date(now.getTime() + 20_000), message: `Servicio no disponible (${message})`, kind: "exhausted", scope: "model" };
 }
 
 /* ----------------------------------------------------------- respuesta */
@@ -203,82 +221,132 @@ export type GeminiDeps = {
   store: KeyStore;
   log?: (entry: RunEntry) => Promise<void>;
   now?: () => Date;
+  sleep?: (ms: number) => Promise<void>;
   timeoutMs?: number;
+  /** Intervalo mínimo entre llamadas de una misma clave con un mismo modelo (0 = sin ritmo). */
+  minIntervalMs?: number;
+  /** Modelo de respaldo para cada modelo (p. ej., principal → ligero). */
+  fallbacks?: Record<string, string>;
+  /** Espera máxima por defecto si la petición no indica otra. */
+  maxWaitMs?: number;
 };
 
-export function createGemini({ fetch: doFetch, store, log, now = () => new Date(), timeoutMs = 90_000 }: GeminiDeps) {
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export function createGemini({
+  fetch: doFetch,
+  store,
+  log,
+  now = () => new Date(),
+  sleep = realSleep,
+  timeoutMs = 90_000,
+  minIntervalMs = 0,
+  fallbacks = {},
+  maxWaitMs: defaultMaxWait = 60_000,
+}: GeminiDeps) {
   async function generate(req: GenerateRequest): Promise<GenerateResult> {
     const started = Date.now();
-    const all = await store.keys();
-    if (!all.length) throw new AiError("no_keys", "No hay ninguna clave de Gemini activa. Añádela en Ajustes → IA.");
-    const available = all.filter((k) => !k.cooldownUntil || k.cooldownUntil <= now());
-    if (!available.length) {
-      const next = all.map((k) => k.cooldownUntil!).sort((a, b) => a.getTime() - b.getTime())[0];
-      throw new AiError("exhausted", "Todas las claves están en espera por límite de uso.", next);
-    }
+    const deadline = now().getTime() + (req.maxWaitMs ?? defaultMaxWait);
+    const fallback = req.noFallback ? undefined : fallbacks[req.model];
+    const models = fallback && fallback !== req.model ? [req.model, fallback] : [req.model];
 
-    const body = JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: req.prompt }] }],
-      ...(req.system ? { systemInstruction: { parts: [{ text: req.system }] } } : {}),
-      ...(req.search || req.urlContext ? { tools: [...(req.search ? [{ googleSearch: {} }] : []), ...(req.urlContext ? [{ urlContext: {} }] : [])] } : {}),
-      generationConfig: {
-        temperature: req.temperature ?? 0.3,
-        ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
-        ...(req.schema ? { responseMimeType: "application/json", responseJsonSchema: req.schema } : {}),
-      },
-    });
+    if (!(await store.keys()).length) throw new AiError("no_keys", "No hay ninguna clave de Gemini activa. Añádela en Ajustes → IA.");
 
     const errors: string[] = [];
     let attempts = 0;
     let lastKind: AiErrorKind = "exhausted";
-    const finish = (entry: Omit<RunEntry, "feature" | "model" | "attempts" | "latencyMs">) =>
-      log?.({ feature: req.feature, model: req.model, attempts, latencyMs: Date.now() - started, ...entry }).catch(() => {});
+    let retryAt: number | null = null;
+    const noteRetry = (ms: number) => (retryAt = retryAt === null ? ms : Math.min(retryAt, ms));
+    const finish = (model: string, entry: Omit<RunEntry, "feature" | "model" | "attempts" | "latencyMs">) =>
+      log?.({ feature: req.feature, model, attempts, latencyMs: Date.now() - started, ...entry }).catch(() => {});
 
-    for (const key of available) {
-      attempts++;
-      let status = 0;
-      let json: unknown = null;
-      try {
-        const res = await doFetch(`${ENDPOINT}/${encodeURIComponent(req.model)}:generateContent`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key.apiKey },
-          body,
-          signal: AbortSignal.timeout(timeoutMs),
-          cache: "no-store",
-        });
-        status = res.status;
-        json = await res.json().catch(() => null);
-      } catch (err) {
-        errors.push(`${key.label}: ${err instanceof Error ? err.message : "error de red"}`);
-      }
+    for (const model of models) {
+      const body = JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: req.prompt }] }],
+        ...(req.system ? { systemInstruction: { parts: [{ text: req.system }] } } : {}),
+        ...(req.search || req.urlContext ? { tools: [...(req.search ? [{ googleSearch: {} }] : []), ...(req.urlContext ? [{ urlContext: {} }] : [])] } : {}),
+        generationConfig: {
+          temperature: req.temperature ?? 0.3,
+          ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
+          ...(req.schema ? { responseMimeType: "application/json", responseJsonSchema: req.schema } : {}),
+        },
+      });
 
-      if (status >= 200 && status < 300) {
-        try {
-          const parsed = parseResponse(json as ResponseBody);
-          await store.success(key.id, now());
-          await finish({ keyId: key.id, status: "ok", inputTokens: parsed.usage.input, outputTokens: parsed.usage.output, error: null });
-          return { ...parsed, keyId: key.id, model: req.model, attempts };
-        } catch (err) {
-          // Respuesta bloqueada o vacía: el problema es el contenido, no la clave.
-          await store.success(key.id, now());
-          await finish({ keyId: key.id, status: "error", inputTokens: null, outputTokens: null, error: (err as Error).message });
-          throw err;
+      // Varias vueltas por modelo: tras un 429 corto la misma clave puede volver a estar lista.
+      for (let round = 0; round < 12; round++) {
+        const t = now().getTime();
+        const all = await store.keys();
+        const usable = all.filter((k) => !k.cooldownUntil || k.cooldownUntil.getTime() <= t);
+        for (const k of all) if (k.cooldownUntil && k.cooldownUntil.getTime() > t) noteRetry(k.cooldownUntil.getTime());
+        if (!usable.length) break;
+
+        const states = await store.modelStates(model);
+        const ranked = usable
+          .map((key, order) => {
+            const st = states.get(key.id);
+            const ready = Math.max(t, st?.cooldownUntil?.getTime() ?? 0, minIntervalMs && st?.lastRequestAt ? st.lastRequestAt.getTime() + minIntervalMs : 0);
+            return { key, ready, order };
+          })
+          .sort((a, b) => a.ready - b.ready || a.order - b.order);
+        const best = ranked[0];
+        if (best.ready > deadline) {
+          noteRetry(best.ready);
+          break;
         }
-      }
+        const slot = minIntervalMs ? (await store.reserve(best.key.id, model, minIntervalMs, now())).getTime() : t;
+        const startAt = Math.max(best.ready, slot);
+        if (startAt > deadline) {
+          noteRetry(startAt);
+          break;
+        }
+        const wait = startAt - now().getTime();
+        if (wait > 0) await sleep(wait);
 
-      const failure = classifyFailure(status, json as ErrorBody | null, now());
-      lastKind = failure.kind;
-      if (!failure.rotate) {
-        await finish({ keyId: key.id, status: "error", inputTokens: null, outputTokens: null, error: failure.message });
-        throw new AiError(failure.kind, failure.message);
+        attempts++;
+        let status = 0;
+        let json: unknown = null;
+        try {
+          const res = await doFetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": best.key.apiKey },
+            body,
+            signal: AbortSignal.timeout(timeoutMs),
+            cache: "no-store",
+          });
+          status = res.status;
+          json = await res.json().catch(() => null);
+        } catch (err) {
+          errors.push(`${best.key.label}: ${err instanceof Error ? err.message : "error de red"}`);
+        }
+
+        if (status >= 200 && status < 300) {
+          await store.success(best.key.id, model, now());
+          try {
+            const parsed = parseResponse(json as ResponseBody);
+            await finish(model, { keyId: best.key.id, status: "ok", inputTokens: parsed.usage.input, outputTokens: parsed.usage.output, error: null });
+            return { ...parsed, keyId: best.key.id, model, attempts };
+          } catch (err) {
+            // Respuesta bloqueada o vacía: el problema es el contenido, no la clave.
+            await finish(model, { keyId: best.key.id, status: "error", inputTokens: null, outputTokens: null, error: (err as Error).message });
+            throw err;
+          }
+        }
+
+        const failure = classifyFailure(status, json as ErrorBody | null, now());
+        lastKind = failure.kind;
+        if (!failure.rotate) {
+          await finish(model, { keyId: best.key.id, status: "error", inputTokens: null, outputTokens: null, error: failure.message });
+          throw new AiError(failure.kind, failure.message);
+        }
+        if (status) errors.push(`${best.key.label} (${model}): ${failure.message}`);
+        await store.failure(best.key.id, model, failure.message, failure.scope === "key" ? { key: failure.cooldownUntil } : { model: failure.cooldownUntil }, now());
       }
-      if (status) errors.push(`${key.label}: ${failure.message}`);
-      await store.failure(key.id, failure.message, failure.cooldownUntil, now());
     }
 
-    const message = `Ninguna clave pudo atender la petición. ${errors.join(" · ")}`.slice(0, 1000);
-    await finish({ keyId: null, status: "error", inputTokens: null, outputTokens: null, error: message });
-    throw new AiError(lastKind, message);
+    const until = retryAt === null ? null : new Date(retryAt);
+    const message = (errors.length ? `Ninguna clave pudo atender la petición. ${errors.slice(-4).join(" · ")}` : "Todas las claves están en espera por límite de uso.").slice(0, 1000);
+    await finish(req.model, { keyId: null, status: "error", inputTokens: null, outputTokens: null, error: message });
+    throw new AiError(lastKind === "exhausted" || !errors.length ? "exhausted" : lastKind, message, until);
   }
 
   /**

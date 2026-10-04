@@ -5,7 +5,7 @@ import { ActionButton } from "@/components/admin/job-search/ActionButton";
 import { SettingsNav } from "@/components/admin/job-search/SettingsNav";
 import { Badge, Empty, Muted, PageHeader, Section, Table, td } from "@/components/admin/job-search/ui";
 import { addApiKeyAction, runRadarAction, saveAiSettingsAction, testApiKeyAction, updateApiKeyAction } from "@/lib/ai/actions";
-import { listAiRuns, listApiKeys, listRadarRuns, usageByFeature } from "@/lib/ai/admin";
+import { listAiRuns, listApiKeys, listKeyModels, listRadarRuns, usageByFeature } from "@/lib/ai/admin";
 import { getAiSettings } from "@/lib/ai/store";
 import { env } from "@/lib/env";
 import { formatDateTime } from "@/lib/job-search/dates";
@@ -36,9 +36,10 @@ function KeyOp({ id, op, label, confirmText }: { id: string; op: string; label: 
 }
 
 export default async function AiSettingsPage() {
-  const [settings, keys, runs, usage, radarRuns, cvs, s] = await Promise.all([
+  const [settings, keys, keyModels, runs, usage, radarRuns, cvs, s] = await Promise.all([
     getAiSettings(db),
     listApiKeys(db),
+    listKeyModels(db),
     listAiRuns(db, 30),
     usageByFeature(db, 7),
     listRadarRuns(db, 5),
@@ -47,7 +48,13 @@ export default async function AiSettingsPage() {
   ]);
   const tz = s.goal.timezone;
   const now = new Date();
-  const available = keys.filter((k) => k.enabled && (!k.cooldownUntil || k.cooldownUntil <= now)).length;
+  // Disponibles para el modelo principal: ni rechazadas ni en espera con ese modelo.
+  const available = keys.filter(
+    (k) =>
+      k.enabled &&
+      (!k.cooldownUntil || k.cooldownUntil <= now) &&
+      !keyModels.some((km) => km.keyId === k.id && km.model === settings.modelDefault && km.cooldownUntil && km.cooldownUntil > now),
+  ).length;
   const cronReady = !!env().CRON_SECRET;
 
   return (
@@ -64,7 +71,7 @@ export default async function AiSettingsPage() {
           <p className="mt-1 font-medium text-carbon">{settings.enabled ? "Activada" : "Desactivada"}</p>
         </div>
         <div className="panel p-4">
-          <p className="text-xs text-slate-600">Claves disponibles ahora</p>
+          <p className="text-xs text-slate-600">Claves disponibles ahora (modelo principal)</p>
           <p className="mt-1 font-mono text-xl text-carbon">
             {available} <span className="text-sm text-slate-500">de {keys.length}</span>
           </p>
@@ -101,17 +108,30 @@ export default async function AiSettingsPage() {
                     <Muted>{i + 1}</Muted>
                   </td>
                   <td className={td}>
-                    <span className="text-carbon">{k.label}</span>
+                    <span className="whitespace-nowrap text-carbon">{k.label}</span>
                     <span className="block font-mono text-xs text-slate-500">••••{k.keyLast4}</span>
                   </td>
                   <td className={td}>
-                    {!k.enabled ? <Badge tone="muted">Desactivada</Badge> : cooling ? <Badge>En espera hasta {formatDateTime(k.cooldownUntil, tz)}</Badge> : <Badge tone="dark">Disponible</Badge>}
-                    {k.lastError ? <span className="mt-1 block max-w-[18rem] text-xs text-slate-500">{k.lastError}</span> : null}
+                    {!k.enabled ? <Badge tone="muted">Desactivada</Badge> : cooling ? <Badge>Rechazada hasta {formatDateTime(k.cooldownUntil, tz)}</Badge> : <Badge tone="dark">Activa</Badge>}
+                    <ul className="mt-1.5 space-y-0.5">
+                      {keyModels
+                        .filter((km) => km.keyId === k.id)
+                        .map((km) => {
+                          const waiting = km.cooldownUntil && km.cooldownUntil > now;
+                          return (
+                            <li key={km.model} className="font-mono text-[0.7rem] text-slate-600" title={km.lastError ?? undefined}>
+                              {km.model}: {waiting ? `en espera hasta ${formatDateTime(km.cooldownUntil, tz)}` : "disponible"} · {km.successCount} ok / {km.failureCount} fallos
+                            </li>
+                          );
+                        })}
+                    </ul>
+                    {k.lastError ? <span className="mt-1 block max-w-[18rem] text-xs text-slate-500">Último error: {k.lastError}</span> : null}
                   </td>
                   <td className={td}>
                     <Muted>
                       {k.successCount} ok · {k.failureCount} fallos
                     </Muted>
+                    <span className="block text-[0.7rem] text-slate-500">en total</span>
                   </td>
                   <td className={td}>
                     <Muted>{k.lastUsedAt ? formatDateTime(k.lastUsedAt, tz) : "—"}</Muted>
@@ -148,6 +168,14 @@ export default async function AiSettingsPage() {
               <Checkbox name="useSearch" label="Permitir acceso web: Google Search y lectura de URLs (necesario para el radar y para investigar empresas)" defaultChecked={settings.useSearch} />
               <Checkbox name="autoMatch" label="Calcular el encaje con mi CV al importar una oferta" defaultChecked={settings.autoMatch} />
             </div>
+            <Checkbox name="modelFallback" label="Si el modelo principal se agota, usar el ligero (Google limita cada modelo por separado)" defaultChecked={settings.modelFallback} />
+            <TextField
+              name="requestsPerMinute"
+              label="Peticiones por minuto, por clave y modelo"
+              type="number"
+              defaultValue={settings.requestsPerMinute}
+              hint={`Entre dos llamadas con la misma clave y modelo se espera al menos ${Math.ceil(60 / settings.requestsPerMinute)} s. Ponlo igual o por debajo del límite de tu plan (AI Studio → Rate limits).`}
+            />
             <ModelField name="modelDefault" label="Modelo principal" value={settings.modelDefault} hint="Análisis, cartas, preparación. Calidad." />
             <ModelField name="modelLight" label="Modelo ligero" value={settings.modelLight} hint="Evaluar resultados del radar. Rápido y con más cuota." />
             <Select

@@ -10,6 +10,7 @@ import { type Actor, describeDbError } from "@/lib/admin/mutations";
 import { requireAdminAction, UnauthorizedError } from "@/lib/auth/guard";
 import { env } from "@/lib/env";
 import { formatDateTime } from "@/lib/job-search/dates";
+import { getGoal } from "@/lib/job-search/repository";
 import { logger } from "@/lib/logger";
 import { clientIp } from "@/lib/security/client-ip";
 import * as admin from "./admin";
@@ -38,9 +39,10 @@ async function actor(): Promise<Actor> {
   return { id: session.user.id, ip: clientIp(await headers(), env().TRUSTED_IP_HEADER) };
 }
 
-function aiMessage(err: AiError) {
-  if (err.retryAt) return `${err.message} Prueba de nuevo a partir de ${formatDateTime(err.retryAt, "UTC")} (UTC).`;
-  return err.message;
+async function aiMessage(err: AiError) {
+  if (!err.retryAt) return err.message;
+  const { goal } = await getGoal(db).catch(() => ({ goal: { timezone: "UTC" } }));
+  return `${err.message} Prueba de nuevo a partir de ${formatDateTime(err.retryAt, goal.timezone)}.`;
 }
 
 async function guard<T>(feature: string, op: (a: Actor) => Promise<{ message: string; data?: T; redirectTo?: string }>): Promise<AiState<T>> {
@@ -49,7 +51,7 @@ async function guard<T>(feature: string, op: (a: Actor) => Promise<{ message: st
     out = await op(await actor());
   } catch (err) {
     if (err instanceof UnauthorizedError) return { status: "error", message: "No autorizado" };
-    if (err instanceof AiError) return { status: "error", message: aiMessage(err) };
+    if (err instanceof AiError) return { status: "error", message: await aiMessage(err) };
     if (err instanceof PageError) return { status: "error", message: err.message };
     if (err instanceof z.ZodError) return { status: "error", message: err.issues[0]?.message ?? "Datos no válidos" };
     const known = describeDbError(err);
@@ -85,6 +87,8 @@ export async function saveAiSettingsAction(_: AiState, fd: FormData): Promise<Ai
     radarMaxAgeDays: str(fd, "radarMaxAgeDays"),
     radarFrequencyDays: str(fd, "radarFrequencyDays"),
     timeBudgetSeconds: str(fd, "timeBudgetSeconds"),
+    requestsPerMinute: str(fd, "requestsPerMinute"),
+    modelFallback: bool(fd, "modelFallback"),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -132,10 +136,11 @@ export async function testApiKeyAction(_: AiState, fd: FormData): Promise<AiStat
     const single = {
       ...store,
       keys: async () => (await store.keys()).filter((k) => k.id === id).map((k) => ({ ...k, cooldownUntil: null })),
+      modelStates: async () => new Map(),
     };
     const gemini = createGemini({ fetch, store: single, log: (e) => logRun(db, e) });
     const started = Date.now();
-    const r = await gemini.generate({ feature: "test", model: settings.modelLight, prompt: "Responde solo con la palabra OK.", temperature: 0, maxOutputTokens: 20 });
+    const r = await gemini.generate({ feature: "test", model: settings.modelLight, prompt: "Responde solo con la palabra OK.", temperature: 0, maxOutputTokens: 20, noFallback: true });
     return { message: `Funciona: «${r.text.slice(0, 20)}» con ${settings.modelLight} en ${Date.now() - started} ms` };
   });
 }

@@ -35,7 +35,7 @@ const err = (code: number, message: string, details: unknown[] = []) => ({ error
 describe("classifyFailure", () => {
   it("rate limit: rotates and waits the retryDelay the API asks for", () => {
     const f = classifyFailure(429, err(429, "Quota exceeded", [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "34s" }]) as never, NOW);
-    expect(f.rotate).toBe(true);
+    expect(f).toMatchObject({ rotate: true, scope: "model" });
     expect(f.cooldownUntil!.getTime() - NOW.getTime()).toBe(34_000);
   });
 
@@ -109,60 +109,148 @@ describe("schema builder", () => {
 
 /* ---------------------------------------------------------------- rotación */
 
+/** Reloj simulado: `sleep` avanza el tiempo en lugar de esperar de verdad. */
+function fakeClock(start = NOW) {
+  let t = start.getTime();
+  const sleeps: number[] = [];
+  return { now: () => new Date(t), sleep: async (ms: number) => void (sleeps.push(ms), (t += ms)), sleeps, advance: (ms: number) => (t += ms) };
+}
+
 function memoryStore(keys: { id: string; cooldownUntil?: Date | null }[]) {
   const state = keys.map((k) => ({ id: k.id, label: k.id, apiKey: `key-${k.id}`, cooldownUntil: k.cooldownUntil ?? null }));
+  const models = new Map<string, { cooldownUntil: Date | null; lastRequestAt: Date | null }>();
+  const slot = (id: string, model: string) => {
+    const k = `${id}|${model}`;
+    if (!models.has(k)) models.set(k, { cooldownUntil: null, lastRequestAt: null });
+    return models.get(k)!;
+  };
   const calls: string[] = [];
   const store: KeyStore = {
     keys: async () => state,
-    success: async (id) => void calls.push(`ok:${id}`),
-    failure: async (id, _e, until) => {
-      calls.push(`fail:${id}`);
-      state.find((k) => k.id === id)!.cooldownUntil = until;
+    modelStates: async (model) => new Map(state.map((k) => [k.id, slot(k.id, model)])),
+    reserve: async (id, model, interval, now) => {
+      const st = slot(id, model);
+      const at = new Date(st.lastRequestAt ? Math.max(st.lastRequestAt.getTime() + interval, now.getTime()) : now.getTime());
+      st.lastRequestAt = at;
+      return at;
+    },
+    success: async (id, model) => {
+      calls.push(`ok:${id}:${model}`);
+      slot(id, model).cooldownUntil = null;
+    },
+    failure: async (id, model, _e, until) => {
+      calls.push(`fail:${id}:${model}`);
+      if (until.key !== undefined) state.find((k) => k.id === id)!.cooldownUntil = until.key;
+      if (until.model !== undefined) slot(id, model).cooldownUntil = until.model;
     },
   };
-  return { store, calls, state };
+  return { store, calls, state, slot };
 }
 
 const response = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const keyOf = (call: unknown[]) => (call[1] as { headers: Record<string, string> }).headers["x-goog-api-key"];
+const modelOf = (call: unknown[]) => /models\/([^:]+):/.exec(String(call[0]))![1];
 
 describe("createGemini", () => {
   it("falls through to the next key on 429 and records both outcomes", async () => {
-    const { store, calls, state } = memoryStore([{ id: "k1" }, { id: "k2" }]);
+    const clock = fakeClock();
+    const { store, calls, slot } = memoryStore([{ id: "k1" }, { id: "k2" }]);
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(response(429, err(429, "limit", [{ retryDelay: "10s" }])))
+      .mockResolvedValueOnce(response(429, err(429, "limit", [{ retryDelay: "40s" }])))
       .mockResolvedValueOnce(response(200, ok("respuesta")));
     const log = vi.fn().mockResolvedValue(undefined);
-    const g = createGemini({ fetch, store, log, now: () => NOW });
+    const g = createGemini({ fetch, store, log, ...clock });
     const r = await g.generate({ feature: "t", model: "m", prompt: "p" });
-    expect(r).toMatchObject({ text: "respuesta", keyId: "k2", attempts: 2 });
-    expect(calls).toEqual(["fail:k1", "ok:k2"]);
-    expect(state[0].cooldownUntil).not.toBeNull();
-    expect(fetch.mock.calls[0][1].headers["x-goog-api-key"]).toBe("key-k1");
-    expect(fetch.mock.calls[1][1].headers["x-goog-api-key"]).toBe("key-k2");
+    expect(r).toMatchObject({ text: "respuesta", keyId: "k2", attempts: 2, model: "m" });
+    expect(calls).toEqual(["fail:k1:m", "ok:k2:m"]);
+    expect(fetch.mock.calls.map(keyOf)).toEqual(["key-k1", "key-k2"]);
+    // La espera es solo para ese modelo: k1 sigue disponible para otros.
+    expect(slot("k1", "m").cooldownUntil!.getTime() - NOW.getTime()).toBe(40_000);
+    expect(slot("k1", "other").cooldownUntil).toBeNull();
     expect(log).toHaveBeenCalledWith(expect.objectContaining({ status: "ok", attempts: 2, keyId: "k2" }));
   });
 
-  it("skips keys still cooling down and says when to retry when none are left", async () => {
-    const later = new Date(NOW.getTime() + 60_000);
-    const { store } = memoryStore([{ id: "k1", cooldownUntil: later }]);
-    const g = createGemini({ fetch: vi.fn(), store, now: () => NOW });
+  it("waits for a short rate limit instead of failing", async () => {
+    const clock = fakeClock();
+    const { store } = memoryStore([{ id: "k1" }]);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(429, err(429, "limit", [{ retryDelay: "8s" }])))
+      .mockResolvedValueOnce(response(200, ok("ya")));
+    const g = createGemini({ fetch, store, ...clock });
+    const r = await g.generate({ feature: "t", model: "m", prompt: "p" });
+    expect(r.text).toBe("ya");
+    expect(clock.sleeps).toEqual([8_000]);
+  });
+
+  it("paces consecutive calls per key and model", async () => {
+    const clock = fakeClock();
+    const { store } = memoryStore([{ id: "k1" }]);
+    const fetch = vi.fn().mockImplementation(async () => response(200, ok("ok")));
+    const g = createGemini({ fetch, store, minIntervalMs: 12_000, ...clock });
+    await g.generate({ feature: "t", model: "m", prompt: "1" });
+    clock.advance(2_000);
+    await g.generate({ feature: "t", model: "m", prompt: "2" });
+    // Otro modelo no comparte ritmo.
+    await g.generate({ feature: "t", model: "otro", prompt: "3" });
+    expect(clock.sleeps).toEqual([10_000]);
+  });
+
+  it("prefers a key that is ready now over waiting for the first one", async () => {
+    const clock = fakeClock();
+    const { store, slot } = memoryStore([{ id: "k1" }, { id: "k2" }]);
+    slot("k1", "m").cooldownUntil = new Date(NOW.getTime() + 30_000);
+    const fetch = vi.fn().mockResolvedValue(response(200, ok("ok")));
+    const g = createGemini({ fetch, store, ...clock });
+    expect((await g.generate({ feature: "t", model: "m", prompt: "p" })).keyId).toBe("k2");
+    expect(clock.sleeps).toEqual([]);
+  });
+
+  it("falls back to the light model when the main one is exhausted beyond the wait budget", async () => {
+    const clock = fakeClock();
+    const { store } = memoryStore([{ id: "k1" }]);
+    const daily = err(429, "quota", [{ violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }]);
+    const fetch = vi.fn().mockResolvedValueOnce(response(429, daily)).mockResolvedValueOnce(response(200, ok("ligero")));
+    const g = createGemini({ fetch, store, fallbacks: { main: "lite" }, ...clock });
+    const r = await g.generate({ feature: "t", model: "main", prompt: "p" });
+    expect(r).toMatchObject({ text: "ligero", model: "lite" });
+    expect(fetch.mock.calls.map(modelOf)).toEqual(["main", "lite"]);
+  });
+
+  it("says when to retry when every key is out beyond the wait budget", async () => {
+    const clock = fakeClock();
+    const later = new Date(NOW.getTime() + 5 * 60_000);
+    const { store, slot } = memoryStore([{ id: "k1" }]);
+    slot("k1", "m").cooldownUntil = later;
+    const fetch = vi.fn();
+    const g = createGemini({ fetch, store, ...clock });
     await expect(g.generate({ feature: "t", model: "m", prompt: "p" })).rejects.toMatchObject({ kind: "exhausted", retryAt: later });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("parks a rejected key for every model", async () => {
+    const clock = fakeClock();
+    const { store, state } = memoryStore([{ id: "k1" }, { id: "k2" }]);
+    const fetch = vi.fn().mockResolvedValueOnce(response(400, err(400, "API key not valid. Please pass a valid API key."))).mockResolvedValueOnce(response(200, ok("ok")));
+    const g = createGemini({ fetch, store, ...clock });
+    await g.generate({ feature: "t", model: "m", prompt: "p" });
+    expect(state[0].cooldownUntil!.getTime() - NOW.getTime()).toBe(6 * 3_600_000);
   });
 
   it("does not burn other keys on a bad request", async () => {
     const { store, calls } = memoryStore([{ id: "k1" }, { id: "k2" }]);
     const fetch = vi.fn().mockResolvedValue(response(400, err(400, "Invalid argument")));
-    const g = createGemini({ fetch, store, now: () => NOW });
+    const g = createGemini({ fetch, store, ...fakeClock() });
     await expect(g.generate({ feature: "t", model: "m", prompt: "p" })).rejects.toMatchObject({ kind: "bad_request" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([]);
   });
 
-  it("rotates on network errors and fails clearly when every key fails", async () => {
+  it("rotates on network errors and fails clearly when every key keeps failing", async () => {
     const { store } = memoryStore([{ id: "k1" }, { id: "k2" }]);
-    const fetch = vi.fn().mockRejectedValueOnce(new Error("ECONNRESET")).mockResolvedValueOnce(response(503, err(503, "overloaded")));
-    const g = createGemini({ fetch, store, now: () => NOW });
+    const fetch = vi.fn().mockRejectedValueOnce(new Error("ECONNRESET")).mockResolvedValue(response(503, err(503, "overloaded")));
+    const g = createGemini({ fetch, store, ...fakeClock(), maxWaitMs: 10_000 });
     await expect(g.generate({ feature: "t", model: "m", prompt: "p" })).rejects.toThrow(/Ninguna clave/);
   });
 

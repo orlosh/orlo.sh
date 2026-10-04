@@ -21,6 +21,12 @@ const CV = [
   "- Migré esquemas de PostgreSQL sin parada usando Docker",
 ].join("\n");
 
+/** Reloj simulado: las esperas por ritmo o por límite avanzan el tiempo en lugar de dormir. */
+function clock(start = NOW) {
+  let t = start.getTime();
+  return { now: () => new Date(t), sleep: async (ms: number) => void (t += ms), set: (d: Date) => (t = d.getTime()) };
+}
+
 /* -------------------------------------------- web y Gemini simulados */
 
 type Gemini = (prompt: string, key: string) => Response;
@@ -100,6 +106,8 @@ async function setup({ enabled = true, keys = 2 } = {}) {
       radarMaxAgeDays: "14",
       radarFrequencyDays: "1",
       timeBudgetSeconds: "120",
+      requestsPerMinute: "5",
+      modelFallback: true,
     }),
   );
   for (let i = 1; i <= keys; i++) await addApiKey(db, ACTOR, { label: `Proyecto ${i}`, apiKey: `AIzaTestKeyNumber${i}xxxxxxxxxxxx` }, SECRET);
@@ -123,6 +131,16 @@ describe("keys", () => {
     expect(JSON.stringify(audit)).not.toContain("AIza");
   });
 
+  it("reserves rate-limit slots atomically across concurrent callers", async () => {
+    const store = dbKeyStore(db, SECRET);
+    const [key] = await store.keys();
+    const slots = await Promise.all([1, 2, 3].map(() => store.reserve(key.id, "gemini-test", 12_000, NOW)));
+    const offsets = slots.map((d) => d.getTime() - NOW.getTime()).sort((a, b) => a - b);
+    expect(offsets).toEqual([0, 12_000, 24_000]);
+    // Otro modelo tiene su propio ritmo.
+    expect((await store.reserve(key.id, "gemini-test-lite", 12_000, NOW)).getTime()).toBe(NOW.getTime());
+  });
+
   it("refuses to run while AI is disabled in the panel", async () => {
     await setup({ enabled: false });
     await expect(aiContext(db, SECRET)).rejects.toMatchObject({ kind: "disabled" });
@@ -144,7 +162,7 @@ describe("import from URL", () => {
       },
       { [JOB_URL]: () => html(JOB_HTML) },
     );
-    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, now: () => NOW });
+    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() });
     const r = await importOpportunity(ctx, ACTOR, { url: JOB_URL });
     expect(r.created).toBe(true);
 
@@ -162,9 +180,12 @@ describe("import from URL", () => {
     expect(match.verifiedRatio).toBe(0.5);
     expect(match.cvName).toBe("CV backend (v3)");
 
-    // La primera clave quedó en espera; la segunda atendió las dos llamadas.
+    // La primera clave quedó en espera solo para ese modelo; la segunda atendió las dos llamadas.
     const keys = await listApiKeys(db);
-    expect(keys[0].cooldownUntil?.toISOString()).toBe(new Date(NOW.getTime() + 30_000).toISOString());
+    expect(keys[0].cooldownUntil).toBeNull();
+    const [k1] = await db.select().from(t.aiKeyModels).where(eq(t.aiKeyModels.keyId, keys[0].id));
+    expect(k1).toMatchObject({ model: "gemini-test", failureCount: 1 });
+    expect(k1.cooldownUntil?.toISOString()).toBe(new Date(NOW.getTime() + 30_000).toISOString());
     expect(keys[1].successCount).toBe(2);
     const runs = await db.select().from(t.aiRuns);
     expect(runs.map((x) => [x.feature, x.status, x.attempts])).toEqual(
@@ -180,7 +201,7 @@ describe("import from URL", () => {
   it("only fills gaps when re-analysing an existing opportunity", async () => {
     const id = await m.createOpportunity(db, ACTOR, opportunityInput.parse({ title: "Mi título", companyName: "Initech", url: JOB_URL, location: "Mi ubicación" }), NOW);
     const web = fakeWeb((p) => (p.includes("Extrae") ? answer(EXTRACTION) : answer(MATCH)), { [JOB_URL]: () => html(JOB_HTML) });
-    await importOpportunity(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, now: () => NOW }), ACTOR, { opportunityId: id });
+    await importOpportunity(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() }), ACTOR, { opportunityId: id });
     const opp = await db.query.jobOpportunities.findFirst({ where: eq(t.jobOpportunities.id, id) });
     expect(opp).toMatchObject({ title: "Mi título", location: "Mi ubicación", salaryMin: 60000, postedAt: "2026-10-01" });
   });
@@ -201,7 +222,7 @@ describe("cover letter", () => {
         }),
       {},
     );
-    const r = await generateCoverLetter(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, now: () => NOW }), ACTOR, { opportunityId: id, language: "es", tone: "cercano", length: "corta", notes: null });
+    const r = await generateCoverLetter(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() }), ACTOR, { opportunityId: id, language: "es", tone: "cercano", length: "corta", notes: null });
     expect(r).toMatchObject({ unverified: 1, total: 2 });
     const doc = await db.query.jobDocuments.findFirst({ where: eq(t.jobDocuments.id, r.documentId) });
     expect(doc).toMatchObject({ kind: "cover_letter", generated: true, opportunityId: id });
@@ -235,7 +256,7 @@ describe("radar", () => {
       },
       { [GOOD]: () => body("Good"), [WEAK]: () => body("Weak") },
     );
-    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, now: () => NOW });
+    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() });
     const r = await runRadar(ctx, "manual", ACTOR);
     expect(r).toMatchObject({ found: 3, evaluated: 2, added: 1, status: "ok" });
 
@@ -271,14 +292,15 @@ describe("radar", () => {
       },
       { [A]: () => html(`<h1>A</h1><p>${"Node.js ".repeat(60)}</p>`) },
     );
-    let clock = NOW;
-    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, now: () => clock });
+    const c = clock();
+    const ctx = await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...c });
     const first = await runRadar(ctx, "manual", ACTOR);
+    // Esperó y reintentó dentro de su presupuesto, pero la cuota no volvió: queda pendiente.
     expect(first).toMatchObject({ evaluated: 1, added: 0, status: "partial" });
     expect((await db.select().from(t.jobLeads))[0].status).toBe("new");
 
     quota = false;
-    clock = new Date(NOW.getTime() + 60_000);
+    c.set(new Date(NOW.getTime() + 10 * 60_000));
     const second = await runRadar(ctx, "manual", ACTOR);
     expect(second).toMatchObject({ added: 1, status: "ok" });
   });
