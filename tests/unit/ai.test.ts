@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AiError, classifyFailure, createGemini, extractJson, type KeyStore, nextPacificMidnight, parseResponse } from "@/lib/ai/gemini";
 import { extractJobPosting, extractMeta, fetchPage, htmlToText, isPrivateAddress, PageError } from "@/lib/ai/page";
 import { canonicalUrl, isDue } from "@/lib/ai/radar";
+import { braveFreshness, detectAts, discoverBoardsWithBrave, fromAdzuna, fromArbeitnow, fromAts, fromRemotive, locationMatches, queryTerms, titleMatches } from "@/lib/ai/sources";
 import { S } from "@/lib/ai/schema";
 import { decryptSecret, encryptSecret, last4 } from "@/lib/ai/secrets";
 import { normalize, quoteInSource, verifyEvidence } from "@/lib/ai/verify";
@@ -46,6 +47,11 @@ describe("classifyFailure", () => {
       NOW,
     );
     expect(f.cooldownUntil!.toISOString()).toBe("2026-10-08T07:00:00.000Z"); // 00:00 PDT
+  });
+
+  it("names the quota that was hit", () => {
+    const f = classifyFailure(429, err(429, "You exceeded your current quota", [{ violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier" }] }]) as never, NOW);
+    expect(f.message).toContain("GenerateRequestsPerMinutePerProjectPerModel-FreeTier");
   });
 
   it("invalid key rotates with a long pause; bad requests and unknown models do not rotate", () => {
@@ -137,6 +143,10 @@ function memoryStore(keys: { id: string; cooldownUntil?: Date | null }[]) {
     success: async (id, model) => {
       calls.push(`ok:${id}:${model}`);
       slot(id, model).cooldownUntil = null;
+    },
+    blockSearch: async (id, until) => {
+      calls.push(`nosearch:${id}`);
+      (state.find((k) => k.id === id) as { searchBlockedUntil?: Date | null }).searchBlockedUntil = until;
     },
     failure: async (id, model, _e, until) => {
       calls.push(`fail:${id}:${model}`);
@@ -236,6 +246,36 @@ describe("createGemini", () => {
     const g = createGemini({ fetch, store, ...clock });
     await g.generate({ feature: "t", model: "m", prompt: "p" });
     expect(state[0].cooldownUntil!.getTime() - NOW.getTime()).toBe(6 * 3_600_000);
+  });
+
+  it("drops Google Search when the plan does not include it, instead of parking the key", async () => {
+    const clock = fakeClock();
+    const { store, calls, slot, state } = memoryStore([{ id: "k1" }]);
+    const billing = err(429, "You exceeded your current quota, please check your plan and billing details.");
+    const fetch = vi.fn().mockResolvedValueOnce(response(429, billing)).mockResolvedValueOnce(response(200, ok("sin búsqueda")));
+    const g = createGemini({ fetch, store, ...clock });
+    const r = await g.generate({ feature: "t", model: "m", prompt: "p", search: true, urlContext: true });
+    expect(r).toMatchObject({ text: "sin búsqueda", searchUsed: false });
+    expect(JSON.parse(fetch.mock.calls[0][1].body).tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
+    expect(JSON.parse(fetch.mock.calls[1][1].body).tools).toEqual([{ urlContext: {} }]);
+    expect(calls).toEqual(["nosearch:k1", "ok:k1:m"]);
+    expect(slot("k1", "m").cooldownUntil).toBeNull();
+    // Mientras dura la marca, ni se intenta con Search.
+    const again = vi.fn().mockResolvedValue(response(200, ok("ok")));
+    const g2 = createGemini({ fetch: again, store, ...clock });
+    await g2.generate({ feature: "t", model: "m", prompt: "p", search: true });
+    expect(JSON.parse(again.mock.calls[0][1].body).tools).toBeUndefined();
+    expect((state[0] as { searchBlockedUntil?: Date }).searchBlockedUntil).toBeTruthy();
+  });
+
+  it("treats a 429 without Search too as a real rate limit", async () => {
+    const clock = fakeClock();
+    const { store, calls } = memoryStore([{ id: "k1" }]);
+    const fetch = vi.fn().mockImplementation(async () => response(429, err(429, "quota", [{ retryDelay: "300s" }])));
+    const g = createGemini({ fetch, store, ...clock });
+    await expect(g.generate({ feature: "t", model: "m", prompt: "p", search: true })).rejects.toMatchObject({ kind: "exhausted" });
+    expect(fetch).toHaveBeenCalledTimes(2); // con Search y sin Search
+    expect(calls).toEqual(["fail:k1:m"]);
   });
 
   it("does not burn other keys on a bad request", async () => {
@@ -368,3 +408,88 @@ describe("radar helpers", () => {
     expect(isDue(new Date(NOW.getTime() - 3 * 86_400_000), 7, NOW)).toBe(false);
   });
 });
+
+/* ------------------------------------------------------------ fuentes */
+
+describe("radar sources", () => {
+  it("detects public ATS boards from careers URLs", () => {
+    expect(detectAts("https://boards.greenhouse.io/acme/jobs/1")).toEqual({ kind: "greenhouse", token: "acme" });
+    expect(detectAts("https://jobs.eu.lever.co/globex")).toEqual({ kind: "lever", token: "globex", eu: true });
+    expect(detectAts("https://jobs.ashbyhq.com/hooli/abc")).toEqual({ kind: "ashby", token: "hooli" });
+    expect(detectAts("https://acme.com/careers")).toBeNull();
+  });
+
+  it("filters titles by the meaningful words of each search", () => {
+    expect(queryTerms("Senior Backend Engineer Node.js remoto")).toEqual(["backend", "engineer", "node", "js"]);
+    const q = ["Senior Backend Engineer Node.js remoto"];
+    expect(titleMatches("Backend Engineer (Payments)", q)).toBe(true);
+    expect(titleMatches("Software Engineer, Backend", q)).toBe(true);
+    expect(titleMatches("Frontend Engineer", q)).toBe(false);
+    expect(titleMatches("Platform Engineer", ["Platform"])).toBe(true);
+  });
+
+  it("filters locations, accepting remote when asked", () => {
+    expect(locationMatches({ location: "Berlin, Germany", remote: null }, [])).toBe(true);
+    expect(locationMatches({ location: "Lisboa", remote: null }, ["Lisboa", "Porto"])).toBe(true);
+    expect(locationMatches({ location: "New York", remote: null }, ["Lisboa", "remoto"])).toBe(false);
+    expect(locationMatches({ location: "Worldwide", remote: true }, ["remoto"])).toBe(true);
+  });
+
+  const reply = (body: unknown) => vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
+
+  it("parses Greenhouse, Lever and Ashby", async () => {
+    const gh = reply({ jobs: [{ id: 1, title: "Backend Engineer", absolute_url: "https://boards.greenhouse.io/acme/jobs/1", location: { name: "Remote" }, first_published: "2026-10-01T00:00:00Z", content: "&lt;p&gt;Node.js&lt;/p&gt;" }] });
+    const [g] = await fromAts(gh, { kind: "greenhouse", token: "acme" }, "Acme");
+    expect(g).toMatchObject({ title: "Backend Engineer", company: "Acme", postedAt: "2026-10-01", description: "Node.js", source: "greenhouse" });
+    expect(String(gh.mock.calls[0][0])).toBe("https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true");
+
+    const lv = reply([{ text: "Platform Engineer", hostedUrl: "https://jobs.lever.co/globex/1", categories: { location: "Lisboa" }, createdAt: 1_790_000_000_000, workplaceType: "remote", descriptionPlain: "Go" }]);
+    const [l] = await fromAts(lv, { kind: "lever", token: "globex", eu: true }, "Globex");
+    expect(l).toMatchObject({ title: "Platform Engineer", location: "Lisboa", remote: true, source: "lever" });
+    expect(String(lv.mock.calls[0][0])).toBe("https://api.eu.lever.co/v0/postings/globex?mode=json");
+
+    const ab = reply({ jobs: [{ title: "SRE", jobUrl: "https://jobs.ashbyhq.com/hooli/1", location: "Berlin", publishedAt: "2026-09-30T10:00:00Z", isRemote: false, descriptionPlain: "K8s" }, { title: "Hidden", jobUrl: "https://x", isListed: false }] });
+    expect((await fromAts(ab, { kind: "ashby", token: "hooli" }, "Hooli")).map((j) => j.title)).toEqual(["SRE"]);
+  });
+
+  it("parses Remotive and Arbeitnow", async () => {
+    const rm = reply({ jobs: [{ title: "Backend Dev", url: "https://remotive.com/remote-jobs/1", company_name: "Initech", candidate_required_location: "Europe", publication_date: "2026-10-02T08:00:00", description: "<p>APIs</p>" }] });
+    expect((await fromRemotive(rm, "backend engineer"))[0]).toMatchObject({ company: "Initech", remote: true, description: "APIs", source: "remotive" });
+    expect(String(rm.mock.calls[0][0])).toContain("search=backend%20engineer");
+    const an = reply({ data: [{ title: "Backend Engineer", url: "https://www.arbeitnow.com/view/x", company_name: "Foo", location: "Berlin", remote: true, created_at: 1_790_000_000, description: "<p>x</p>" }] });
+    expect((await fromArbeitnow(an))[0]).toMatchObject({ postedAt: "2026-09-21", remote: true, source: "arbeitnow" });
+  });
+
+  it("queries Adzuna with keywords, location and age, keeping only the snippet", async () => {
+    const az = reply({ results: [{ title: "<strong>Backend</strong> Engineer", redirect_url: "https://www.adzuna.es/land/ad/1", company: { display_name: "Acme" }, location: { display_name: "Madrid" }, created: "2026-10-03T10:00:00Z", description: "Node.js…" }] });
+    const [j] = await fromAdzuna(az, { appId: "id", appKey: "key", country: "es" }, "backend engineer", "Madrid", 14);
+    expect(j).toMatchObject({ title: "Backend Engineer", company: "Acme", postedAt: "2026-10-03", source: "adzuna" });
+    const url = new URL(String(az.mock.calls[0][0]));
+    expect(url.pathname).toBe("/v1/api/jobs/es/search/1");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ app_id: "id", app_key: "key", what: "backend engineer", where: "Madrid", max_days_old: "14" });
+  });
+
+  it("discovers company boards with Brave restricted to public ATS sites", async () => {
+    const br = reply({ web: { results: [
+      { url: "https://boards.greenhouse.io/acme-corp/jobs/123", title: "Job Application for Backend Engineer at Acme" },
+      { url: "https://boards.greenhouse.io/acme-corp/jobs/456", title: "Platform Engineer" },
+      { url: "https://jobs.lever.co/globex/abc", title: "Globex - Backend" },
+      { url: "https://example.com/blog", title: "Blog" },
+    ] } });
+    const r = await discoverBoardsWithBrave(br, "brave-key", "Senior Backend Engineer remoto", 7);
+    expect(r.boards).toEqual([
+      { kind: "greenhouse", token: "acme-corp", company: "Acme Corp" },
+      { kind: "lever", token: "globex", company: "Globex" },
+    ]);
+    const [url, init] = br.mock.calls[0];
+    const q = new URL(String(url)).searchParams;
+    expect(q.get("q")).toContain("backend engineer (site:boards.greenhouse.io OR");
+    expect(q.get("freshness")).toBe("pw");
+    expect(init.headers["X-Subscription-Token"]).toBe("brave-key");
+    expect(braveFreshness(1)).toBe("pd");
+    expect(braveFreshness(30)).toBe("pm");
+    const denied = vi.fn().mockResolvedValue(new Response("{}", { status: 401 }));
+    await expect(discoverBoardsWithBrave(denied, "x", "q q", 7)).rejects.toThrow(/rechazada/);
+  });
+});
+

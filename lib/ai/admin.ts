@@ -5,6 +5,7 @@ import { type Actor, audit } from "@/lib/admin/mutations";
 import type { ContentDb } from "@/lib/content/repository";
 import { optional } from "@/lib/validation/content";
 import { encryptSecret, last4 } from "./secrets";
+import { ADZUNA_COUNTRIES } from "./sources";
 
 /** Ajustes y claves de la IA: validación y escritura (con auditoría, nunca con la clave en claro). */
 
@@ -36,6 +37,8 @@ export const aiSettingsInput = z.object({
   radarFrequencyDays: int(1, 30),
   timeBudgetSeconds: int(20, 800),
   requestsPerMinute: int(1, 120),
+  radarSources: z.array(z.enum(["companies", "remotive", "arbeitnow", "adzuna", "brave", "google"])).max(6),
+  urlContextFallbackOnly: z.boolean(),
   modelFallback: z.boolean(),
 });
 export type AiSettingsInput = z.infer<typeof aiSettingsInput>;
@@ -58,6 +61,47 @@ export async function saveAiSettings(db: ContentDb, actor: Actor, input: AiSetti
       .values({ id: 1, ...input })
       .onConflictDoUpdate({ target: t.aiSettings.id, set: { ...input, updatedAt: new Date() } });
     await audit(tx, actor, "update", "aiSettings", 1, Object.keys(input));
+  });
+}
+
+/** Credenciales de una fuente del radar. Clave vacía = se conserva la guardada; `clear` = se borra. */
+export const sourceKeysInput = z.discriminatedUnion("provider", [
+  z.object({
+    provider: z.literal("adzuna"),
+    clear: z.boolean(),
+    appId: z.string().trim().max(60).regex(/^[A-Za-z0-9_-]*$/, "app_id no válido"),
+    appKey: z.string().trim().max(120).regex(/^[A-Za-z0-9_-]*$/, "app_key no válida"),
+    country: z.enum(ADZUNA_COUNTRIES),
+  }),
+  z.object({
+    provider: z.literal("brave"),
+    clear: z.boolean(),
+    apiKey: z.string().trim().max(200).regex(/^[A-Za-z0-9_-]*$/, "Clave no válida"),
+  }),
+]);
+
+export async function saveSourceKeys(db: ContentDb, actor: Actor, input: z.infer<typeof sourceKeysInput>, secret: string) {
+  const set: Partial<typeof t.aiSettings.$inferInsert> =
+    input.provider === "adzuna"
+      ? input.clear
+        ? { adzunaAppId: null, adzunaKeyCiphertext: null, adzunaKeyLast4: null }
+        : {
+            adzunaAppId: input.appId || undefined,
+            adzunaCountry: input.country,
+            ...(input.appKey ? { adzunaKeyCiphertext: encryptSecret(input.appKey, secret), adzunaKeyLast4: last4(input.appKey) } : {}),
+          }
+      : input.clear
+        ? { braveKeyCiphertext: null, braveKeyLast4: null }
+        : input.apiKey
+          ? { braveKeyCiphertext: encryptSecret(input.apiKey, secret), braveKeyLast4: last4(input.apiKey) }
+          : {};
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(t.aiSettings)
+      .values({ id: 1, ...set })
+      .onConflictDoUpdate({ target: t.aiSettings.id, set: { ...set, updatedAt: new Date() } });
+    // Solo qué se cambió, nunca el valor.
+    await audit(tx, actor, "update", "aiSettings", 1, [`${input.provider}:${input.clear ? "clear" : "set"}`]);
   });
 }
 
@@ -130,6 +174,7 @@ export const listApiKeys = (db: ContentDb) =>
       lastErrorAt: t.aiApiKeys.lastErrorAt,
       lastError: t.aiApiKeys.lastError,
       cooldownUntil: t.aiApiKeys.cooldownUntil,
+      searchBlockedUntil: t.aiApiKeys.searchBlockedUntil,
     })
     .from(t.aiApiKeys)
     .orderBy(asc(t.aiApiKeys.position), asc(t.aiApiKeys.createdAt));

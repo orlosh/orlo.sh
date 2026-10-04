@@ -5,7 +5,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { bool, str } from "@/lib/admin/form";
+import { bool, list, str } from "@/lib/admin/form";
 import { type Actor, describeDbError } from "@/lib/admin/mutations";
 import { requireAdminAction, UnauthorizedError } from "@/lib/auth/guard";
 import { env } from "@/lib/env";
@@ -88,6 +88,8 @@ export async function saveAiSettingsAction(_: AiState, fd: FormData): Promise<Ai
     radarFrequencyDays: str(fd, "radarFrequencyDays"),
     timeBudgetSeconds: str(fd, "timeBudgetSeconds"),
     requestsPerMinute: str(fd, "requestsPerMinute"),
+    radarSources: list(fd, "radarSources"),
+    urlContextFallbackOnly: bool(fd, "urlContextFallbackOnly"),
     modelFallback: bool(fd, "modelFallback"),
   });
   if (!parsed.success) {
@@ -124,6 +126,26 @@ export async function updateApiKeyAction(_: AiState, fd: FormData): Promise<AiSt
     else if (op === "reset") await admin.updateApiKey(db, a, id, { resetCooldown: true });
     else throw new AiError("bad_request", "Operación no válida");
     return { message: "Hecho" };
+  });
+}
+
+export async function saveSourceKeysAction(_: AiState, fd: FormData): Promise<AiState> {
+  const parsed = admin.sourceKeysInput.safeParse({
+    provider: str(fd, "provider"),
+    clear: bool(fd, "clear"),
+    appId: str(fd, "appId"),
+    appKey: str(fd, "appKey"),
+    country: str(fd, "country") || "es",
+    apiKey: str(fd, "apiKey"),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const i of parsed.error.issues) fieldErrors[String(i.path[0])] ??= i.message;
+    return { status: "error", message: "Revisa los campos marcados", fieldErrors };
+  }
+  return guard("keys", async (a) => {
+    await admin.saveSourceKeys(db, a, parsed.data, secret());
+    return { message: parsed.data.clear ? "Credenciales borradas" : "Credenciales guardadas (cifradas)" };
   });
 }
 

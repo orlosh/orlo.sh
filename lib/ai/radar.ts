@@ -1,12 +1,14 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import * as t from "@/db/schema";
 import { type Actor, audit } from "@/lib/admin/mutations";
-import { todayIn } from "@/lib/job-search/dates";
+import { addDays, todayIn } from "@/lib/job-search/dates";
 import { createOpportunity } from "@/lib/job-search/mutations";
 import { opportunityInput } from "@/lib/job-search/validation";
 import { evaluateFit } from "./features";
 import { AiError } from "./gemini";
 import { readJobPage } from "./page";
+import { type Ats, detectAts, discoverBoardsWithBrave, type FoundJob, FULL_TEXT_SOURCES, fromAdzuna, fromArbeitnow, fromAts, fromRemotive, locationMatches, queryTerms, titleMatches } from "./sources";
+import { decryptSecret } from "./secrets";
 import { data, SYSTEM } from "./prompts";
 import * as Sc from "./schemas";
 import { type AiCtx, candidateContext } from "./store";
@@ -50,7 +52,6 @@ type Log = { at: string; msg: string }[];
 
 export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Actor = SYSTEM_ACTOR) {
   const { settings: st, db } = ctx;
-  if (!st.useSearch) throw new AiError("bad_request", "El radar necesita el acceso web (Google Search). Actívalo en Ajustes → IA.");
   const started = Date.now();
   const budgetMs = st.timeBudgetSeconds * 1000;
   const outOfTime = () => Date.now() - started > budgetMs;
@@ -74,34 +75,150 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
     const excluded = lines(st.radarExcludedCompanies).map((c) => c.toLowerCase());
     const today = todayIn("UTC", ctx.now());
 
-    // 1. Búsqueda con Google Search.
-    const { data: res, result } = await ctx.gemini.generateJson(
-      {
-        feature: "radar_search",
-        model: st.modelDefault,
-        maxWaitMs: waitBudget(),
-        system: SYSTEM,
-        search: true,
-        temperature: 0.2,
-        prompt: [
-          `Hoy es ${today}. Busca ofertas de empleo ABIERTAS publicadas en los últimos ${st.radarMaxAgeDays} días que encajen con este perfil.`,
-          queries.length ? `Búsquedas: ${queries.join(" | ")}` : `Roles: ${roles.join(", ")}`,
-          cand.goal.targetSeniority ? `Nivel: ${cand.goal.targetSeniority}` : "",
-          lines(st.radarLocations).length ? `Ubicaciones o modalidad: ${lines(st.radarLocations).join(", ")}` : cand.goal.preferredWorkplaces.length ? `Modalidad: ${cand.goal.preferredWorkplaces.join(", ")}` : "",
-          excluded.length ? `Excluye estas empresas: ${excluded.join(", ")}` : "",
-          data("HABILIDADES DEL CANDIDATO", cand.profile.skills.slice(0, 60).join(", ")),
-          "Devuelve solo ofertas concretas con la URL directa de la oferta (página de empleo de la empresa, ATS como Greenhouse/Lever/Ashby o portales de empleo). No devuelvas listados de búsqueda ni inventes URLs: si no tienes la URL exacta, omite la oferta.",
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-      },
-      Sc.radarSearch,
-    );
-    say(`Búsqueda: ${result.searchQueries.join(" · ") || "sin consultas registradas"} → ${res.jobs.length} candidatas`);
+    const sources = new Set(st.radarSources);
+    const terms = queries.length ? queries : roles;
+    const locations = lines(st.radarLocations);
+    const minDate = addDays(today, -st.radarMaxAgeDays);
+    const jobs: FoundJob[] = [];
+    // Las fuentes con API filtran por título, ubicación y antigüedad antes de gastar llamadas a Gemini.
+    const keep = (j: FoundJob) => titleMatches(j.title, terms) && locationMatches(j, locations) && (!j.postedAt || j.postedAt >= minDate);
+    const take = (label: string, list: FoundJob[]) => {
+      const ok = list.filter(keep).sort((a, b) => (b.postedAt ?? "").localeCompare(a.postedAt ?? "")).slice(0, 30);
+      jobs.push(...ok);
+      say(`${label}: ${list.length} ofertas, ${ok.length} encajan con las búsquedas`);
+    };
+
+    // Tablones ya consultados en esta ejecución (empresas objetivo y descubiertos con Brave).
+    const seenBoards = new Set<string>();
+
+    // 1a. Páginas de empleo de las empresas objetivo (Greenhouse, Lever, Ashby).
+    if (sources.has("companies")) {
+      const companies = await db.query.jobCompanies.findMany({ where: eq(t.jobCompanies.archived, false), with: { opportunities: { columns: { url: true } } } });
+      const boards = new Map<string, { ats: Ats; company: string }>();
+      for (const c of companies) {
+        for (const u of [c.careersUrl, c.website, ...c.opportunities.map((o) => o.url)]) {
+          const ats = detectAts(u);
+          if (ats) boards.set(`${ats.kind}:${ats.token.toLowerCase()}`, { ats, company: c.name });
+        }
+      }
+      if (!boards.size) say("Empresas objetivo: ninguna tiene página de empleo en Greenhouse, Lever o Ashby (añade su URL de empleo en Empresas)");
+      for (const [boardKey, { ats, company }] of boards) {
+        if (outOfTime()) break;
+        seenBoards.add(boardKey);
+        try {
+          take(`${company} (${ats.kind})`, await fromAts(ctx.fetchImpl, ats, company));
+        } catch (err) {
+          say(`${company} (${ats.kind}): ${(err as Error).message}`);
+        }
+      }
+    }
+
+    // 1b. Portales con API pública.
+    if (sources.has("remotive")) {
+      try {
+        // Una sola consulta por ejecución: Remotive pide no pasar de 4 al día.
+        take("Remotive", await fromRemotive(ctx.fetchImpl, queryTerms(terms[0]).join(" ")));
+      } catch (err) {
+        say(`Remotive: ${(err as Error).message}`);
+      }
+    }
+    if (sources.has("arbeitnow")) {
+      try {
+        take("Arbeitnow", await fromArbeitnow(ctx.fetchImpl));
+      } catch (err) {
+        say(`Arbeitnow: ${(err as Error).message}`);
+      }
+    }
+
+    // 1c. Adzuna: búsqueda por palabras clave y ubicación (una consulta por búsqueda, máximo dos).
+    if (sources.has("adzuna")) {
+      const appKey = st.adzunaKeyCiphertext ? decryptSecret(st.adzunaKeyCiphertext, ctx.secret) : null;
+      if (!st.adzunaAppId || !appKey) say("Adzuna: falta la clave (Ajustes → IA → Fuentes con clave)");
+      else {
+        for (const q of terms.slice(0, 2)) {
+          if (outOfTime()) break;
+          try {
+            take(`Adzuna «${q}»`, await fromAdzuna(ctx.fetchImpl, { appId: st.adzunaAppId, appKey, country: st.adzunaCountry }, queryTerms(q).join(" "), locations.find((l) => !/^(remote|remoto)$/i.test(l)) ?? null, st.radarMaxAgeDays));
+          } catch (err) {
+            say(`Adzuna: ${(err as Error).message}`);
+          }
+        }
+      }
+    }
+
+    // 1d. Brave: descubre empresas que publican ofertas parecidas en Greenhouse, Lever o Ashby y
+    //     descarga su tablón completo por la API pública del ATS (textos completos, URLs reales).
+    if (sources.has("brave")) {
+      const braveKey = st.braveKeyCiphertext ? decryptSecret(st.braveKeyCiphertext, ctx.secret) : null;
+      if (!braveKey) say("Brave: falta la clave (Ajustes → IA → Fuentes con clave)");
+      else {
+        const discovered = new Map<string, Ats & { company: string | null }>();
+        for (const q of terms.slice(0, 2)) {
+          if (outOfTime()) break;
+          try {
+            const r = await discoverBoardsWithBrave(ctx.fetchImpl, braveKey, q, st.radarMaxAgeDays);
+            for (const b of r.boards) discovered.set(`${b.kind}:${b.token.toLowerCase()}`, b);
+            say(`Brave «${q}»: ${r.results} resultados, ${r.boards.length} empresas`);
+          } catch (err) {
+            say(`Brave: ${(err as Error).message}`);
+          }
+        }
+        let boardsRead = 0;
+        for (const [key, b] of discovered) {
+          if (outOfTime() || boardsRead >= 15) break;
+          if (seenBoards.has(key) || (b.company && excluded.includes(b.company.toLowerCase()))) continue;
+          seenBoards.add(key);
+          boardsRead++;
+          try {
+            const list = (await fromAts(ctx.fetchImpl, b, b.company)).map((j) => ({ ...j, source: "brave" }));
+            take(`${b.company ?? b.token} (vía Brave, ${b.kind})`, list);
+          } catch (err) {
+            say(`${b.company ?? b.token}: ${(err as Error).message}`);
+          }
+        }
+      }
+    }
+
+    // 1e. Google Search (solo si el plan lo incluye; en el gratuito de Gemini 3 no).
+    if (sources.has("google") && st.useSearch) {
+      try {
+        const { data: res, result } = await ctx.gemini.generateJson(
+          {
+            feature: "radar_search",
+            model: st.modelDefault,
+            maxWaitMs: waitBudget(),
+            system: SYSTEM,
+            search: true,
+            temperature: 0.2,
+            prompt: [
+              `Hoy es ${today}. Busca ofertas de empleo ABIERTAS publicadas en los últimos ${st.radarMaxAgeDays} días que encajen con este perfil.`,
+              queries.length ? `Búsquedas: ${queries.join(" | ")}` : `Roles: ${roles.join(", ")}`,
+              cand.goal.targetSeniority ? `Nivel: ${cand.goal.targetSeniority}` : "",
+              locations.length ? `Ubicaciones o modalidad: ${locations.join(", ")}` : cand.goal.preferredWorkplaces.length ? `Modalidad: ${cand.goal.preferredWorkplaces.join(", ")}` : "",
+              excluded.length ? `Excluye estas empresas: ${excluded.join(", ")}` : "",
+              data("HABILIDADES DEL CANDIDATO", cand.profile.skills.slice(0, 60).join(", ")),
+              "Devuelve solo ofertas concretas con la URL directa de la oferta (página de empleo de la empresa, ATS como Greenhouse/Lever/Ashby o portales de empleo). No devuelvas listados de búsqueda ni inventes URLs: si no tienes la URL exacta, omite la oferta.",
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+          },
+          Sc.radarSearch,
+        );
+        if (!result.searchUsed) {
+          // Sin búsqueda real, las URLs saldrían de la memoria del modelo: no se usan.
+          say("Google Search: tu plan de Gemini no lo incluye (gratuito); se omite esta fuente");
+        } else {
+          say(`Google Search: ${result.searchQueries.join(" · ") || "sin consultas registradas"} → ${res.jobs.length} ofertas`);
+          jobs.push(...res.jobs.map((j) => ({ title: j.title, company: j.company ?? null, url: j.url, location: j.location ?? null, postedAt: j.postedAt ?? null, remote: null, description: null, source: "google" })));
+        }
+      } catch (err) {
+        say(`Google Search: ${(err as Error).message}`);
+      }
+    }
 
     // 2. Normalización y duplicados (contra el radar y contra las oportunidades ya guardadas).
-    const candidates = new Map<string, (typeof res.jobs)[number]>();
-    for (const j of res.jobs) {
+    const candidates = new Map<string, FoundJob>();
+    for (const j of jobs) {
       const url = canonicalUrl(j.url);
       if (!url || candidates.has(url)) continue;
       if (j.company && excluded.includes(j.company.toLowerCase())) continue;
@@ -126,7 +243,17 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
         .values(
           fresh.map((url) => {
             const j = candidates.get(url)!;
-            return { url, title: j.title.slice(0, 200), companyName: j.company ?? null, location: j.location ?? null, snippet: j.snippet ?? null, postedAt: j.postedAt && /^\d{4}-\d{2}-\d{2}$/.test(j.postedAt) ? j.postedAt : null, runId: run.id };
+            return {
+              url,
+              title: j.title.slice(0, 200),
+              companyName: j.company,
+              location: j.location,
+              // Si la fuente da el texto de la oferta, se guarda y no hace falta descargar la página.
+              snippet: j.description?.slice(0, 20_000) ?? null,
+              postedAt: j.postedAt && /^\d{4}-\d{2}-\d{2}$/.test(j.postedAt) ? j.postedAt : null,
+              source: j.source,
+              runId: run.id,
+            };
           }),
         )
         .onConflictDoNothing();
@@ -135,7 +262,16 @@ export async function runRadar(ctx: AiCtx, trigger: "cron" | "manual", actor: Ac
 
     for (const lead of pending) {
       if (outOfTime()) break;
-      const page = await readJobPage(lead.url, ctx.fetchImpl);
+      // Ofertas de APIs oficiales: la URL es real y el texto ya está. Las de Google se verifican descargando la página.
+      // Si la fuente ya dio el texto completo, no se descarga nada. Si no (Google, Adzuna), se
+      // descarga la oferta; de Adzuna, si la página no se puede leer, queda su extracto.
+      const fullText = lead.source && FULL_TEXT_SOURCES.has(lead.source) && (lead.snippet?.length ?? 0) >= 200;
+      let page: Awaited<ReturnType<typeof readJobPage>> = fullText
+        ? { ok: true as const, finalUrl: lead.url, posting: null, meta: { title: undefined, description: undefined, siteName: undefined }, text: lead.snippet! }
+        : await readJobPage(lead.url, ctx.fetchImpl);
+      if (lead.source === "adzuna" && (!page.ok || (page.text ?? "").length < 200) && (lead.snippet?.length ?? 0) >= 150) {
+        page = { ok: true as const, finalUrl: lead.url, posting: null, meta: { title: undefined, description: undefined, siteName: undefined }, text: `${lead.snippet} (extracto de Adzuna: no se pudo leer la oferta completa)` };
+      }
       if (!page.ok || (page.text ?? "").length < 200) {
         await db
           .update(t.jobLeads)

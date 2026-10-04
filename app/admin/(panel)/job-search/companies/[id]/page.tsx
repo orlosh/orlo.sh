@@ -58,14 +58,14 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       </div>
 
       <Section
-        title="Investigación (IA + Google Search)"
+        title="Investigación (IA)"
         action={
           <AiButton
             action={researchCompanyAction}
             hidden={{ id: c.id }}
             label={c.aiResearch ? "Actualizar investigación" : "Investigar con IA"}
             pendingLabel="Buscando en la web…"
-            disabled={!ai.enabled ? "Activa la IA en Ajustes → Inteligencia artificial" : !ai.useSearch ? "Activa el acceso web en Ajustes → IA" : undefined}
+            disabled={!ai.enabled ? "Activa la IA en Ajustes → Inteligencia artificial" : undefined}
           />
         }
       >

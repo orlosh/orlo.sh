@@ -115,6 +115,9 @@ export async function importOpportunity(ctx: AiCtx, actor: Actor, args: { url?: 
   const posting = page?.ok ? page.posting : null;
   const today = todayIn("UTC", ctx.now());
   const web = ctx.settings.useSearch;
+  // Con el texto ya descargado por el servidor, que Gemini vuelva a leer la URL solo gasta cuota.
+  const serverRead = !!page?.ok && ((page.text?.length ?? 0) >= 600 || (posting?.description?.length ?? 0) >= 300);
+  const readUrl = !!url && (!ctx.settings.urlContextFallbackOnly || !serverRead);
 
   const { data: x, result } = await ctx.gemini.generateJson(
     {
@@ -122,18 +125,20 @@ export async function importOpportunity(ctx: AiCtx, actor: Actor, args: { url?: 
       model: ctx.settings.modelDefault,
       system: SYSTEM,
       search: web,
-      urlContext: web && !!url,
+      // La lectura de URLs es gratuita, pero solo se usa si el servidor no pudo leer la página.
+      urlContext: readUrl,
       temperature: 0.1,
       prompt: [
         `Extrae la información de esta oferta de empleo. Hoy es ${today}.`,
         url ? `URL: ${url}` : "",
         posting ? data("DATOS ESTRUCTURADOS DE LA PROPIA OFERTA (fiables)", JSON.stringify(posting)) : "",
         page?.ok && page.text ? data("TEXTO DE LA PÁGINA (puede incluir menús o ruido)", clip(page.text, 18_000)) : "",
-        page && !page.ok ? `No se pudo descargar la página desde el servidor (${page.error}).${web ? " Léela con la herramienta de contexto de URL." : ""}` : "",
+        page && !page.ok ? `No se pudo descargar la página desde el servidor (${page.error}). Léela con la herramienta de contexto de URL.` : "",
+        page?.ok && !serverRead && readUrl ? "El servidor apenas pudo leer texto de la página (probablemente se genera con JavaScript). Léela con la herramienta de contexto de URL." : "",
         existing?.description ? data("DESCRIPCIÓN YA GUARDADA", clip(existing.description, 18_000)) : "",
         web
           ? "Usa Google Search solo para datos de la empresa (sector, tamaño, fase) y, si la oferta no publica salario, una estimación de fuentes públicas marcada con salaryIsEstimate=true y la fuente en salaryNote."
-          : "No tienes acceso web: usa solo el texto proporcionado.",
+          : "No tienes Google Search: usa solo el texto de la oferta. No estimes salarios.",
         "En `description` copia el texto completo de la oferta, limpio y sin resumir. Evalúa el riesgo de oferta fantasma con señales concretas (antigüedad, republicaciones, vaguedad).",
       ]
         .filter(Boolean)
@@ -156,7 +161,7 @@ export async function importOpportunity(ctx: AiCtx, actor: Actor, args: { url?: 
     salaryCurrency: clip(salaryFromPosting?.currency ?? (x.salaryIsEstimate ? null : x.salaryCurrency), 3).toUpperCase() || null,
     description: clip((posting?.description?.length ?? 0) > (x.description?.length ?? 0) ? posting!.description : x.description, 50_000) || null,
   };
-  const analysis = { ...x, sources: result.sources, searchQueries: result.searchQueries, fetchedByServer: !!page?.ok, finalUrl: page?.finalUrl ?? url, model: result.model, at: ctx.now().toISOString() };
+  const analysis = { ...x, sources: result.sources, searchQueries: result.searchQueries, searchUsed: result.searchUsed, urlReadByGemini: readUrl, fetchedByServer: serverRead, finalUrl: page?.finalUrl ?? url, model: result.model, at: ctx.now().toISOString() };
   const finalUrl = httpsOrNull(page?.ok ? page.finalUrl : url);
 
   let id = existing?.id;
@@ -295,7 +300,6 @@ export async function generateCoverLetter(
 /* --------------------------------------------- investigación de empresa */
 
 export async function researchCompany(ctx: AiCtx, actor: Actor, companyId: string) {
-  if (!ctx.settings.useSearch) throw new AiError("bad_request", "Activa el acceso web (Google Search) en Ajustes → IA para investigar empresas.");
   const co = await ctx.db.query.jobCompanies.findFirst({ where: eq(t.jobCompanies.id, companyId), with: { opportunities: true } });
   if (!co) throw new AiError("bad_request", "La empresa ya no existe");
   const { data: r, result } = await ctx.gemini.generateJson(
@@ -303,20 +307,21 @@ export async function researchCompany(ctx: AiCtx, actor: Actor, companyId: strin
       feature: "company_research",
       model: ctx.settings.modelDefault,
       system: SYSTEM,
-      search: true,
+      search: ctx.settings.useSearch,
       temperature: 0.2,
       prompt: [
         `Investiga la empresa «${co.name}»${co.website ? ` (${co.website})` : ""} para alguien que quiere trabajar allí. Hoy es ${todayIn("UTC", ctx.now())}.`,
         co.opportunities.length ? `Puestos que le interesan: ${co.opportunities.map((o) => o.title).join("; ")}.` : "",
         "Busca: qué hace y para quién, tamaño, financiación, noticias de los últimos 12 meses con fecha, señales de contratación o despidos, stack técnico público, cultura y lo que se sepa de su proceso de selección.",
         "Si hay varias empresas con ese nombre, quédate con la que contrata para esos puestos y dilo en el resumen. Lo que no encuentres, omítelo.",
+        "Si no puedes buscar en la web, usa solo lo que sepas con seguridad, no inventes noticias ni fechas, y omite las secciones de las que no tengas datos fiables.",
       ]
         .filter(Boolean)
         .join("\n\n"),
     },
     Sc.companyResearch,
   );
-  const research = { ...r, sources: result.sources, searchQueries: result.searchQueries, model: result.model, at: ctx.now().toISOString() };
+  const research = { ...r, sources: result.sources, searchQueries: result.searchQueries, searchUsed: result.searchUsed, model: result.model, at: ctx.now().toISOString() };
   await ctx.db.transaction(async (tx) => {
     await tx
       .update(t.jobCompanies)

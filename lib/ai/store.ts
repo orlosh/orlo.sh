@@ -31,6 +31,14 @@ export const AI_DEFAULTS: AiSettings = {
   radarMaxPerRun: 8,
   radarMaxAgeDays: 14,
   radarFrequencyDays: 1,
+  radarSources: ["companies", "remotive", "arbeitnow", "google"],
+  urlContextFallbackOnly: true,
+  adzunaAppId: null,
+  adzunaKeyCiphertext: null,
+  adzunaKeyLast4: null,
+  adzunaCountry: "es",
+  braveKeyCiphertext: null,
+  braveKeyLast4: null,
   radarLastRunAt: null,
   timeBudgetSeconds: 240,
   requestsPerMinute: 5,
@@ -62,7 +70,7 @@ export function dbKeyStore(db: ContentDb, secret: string): KeyStore {
       const rows = await db.select().from(t.aiApiKeys).where(eq(t.aiApiKeys.enabled, true)).orderBy(asc(t.aiApiKeys.position), asc(t.aiApiKeys.createdAt));
       return rows.flatMap((r) => {
         const apiKey = decryptSecret(r.keyCiphertext, secret);
-        return apiKey ? [{ id: r.id, label: r.label, apiKey, cooldownUntil: r.cooldownUntil }] : [];
+        return apiKey ? [{ id: r.id, label: r.label, apiKey, cooldownUntil: r.cooldownUntil, searchBlockedUntil: r.searchBlockedUntil }] : [];
       });
     },
     async modelStates(model) {
@@ -80,6 +88,9 @@ export function dbKeyStore(db: ContentDb, secret: string): KeyStore {
         })
         .returning({ at: t.aiKeyModels.lastRequestAt });
       return row.at ?? now;
+    },
+    async blockSearch(keyId, until) {
+      await db.update(t.aiApiKeys).set({ searchBlockedUntil: until }).where(eq(t.aiApiKeys.id, keyId));
     },
     async success(keyId, model, at) {
       await db
@@ -131,7 +142,7 @@ export async function aiContext(
     minIntervalMs: Math.ceil(60_000 / settings.requestsPerMinute),
     fallbacks: settings.modelFallback && settings.modelLight !== settings.modelDefault ? { [settings.modelDefault]: settings.modelLight } : {},
   });
-  return { db, settings, gemini, now, fetchImpl };
+  return { db, settings, gemini, now, fetchImpl, secret };
 }
 export type AiCtx = Awaited<ReturnType<typeof aiContext>>;
 

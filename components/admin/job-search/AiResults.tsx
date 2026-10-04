@@ -196,6 +196,7 @@ type Research = {
   culture?: string[];
   interviewProcess?: string[];
   sources?: Source[];
+  searchUsed?: boolean;
   model?: string;
   at?: string;
 };
@@ -222,6 +223,11 @@ export function CompanyResearchCard({ research }: { research: Research | null })
       <p className="flex items-center gap-2 text-xs text-slate-500">
         <AiMark /> Investigación · {meta(r.model, r.at)}
       </p>
+      {r.searchUsed === false ? (
+        <p className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+          Hecha sin búsqueda web (tu plan de Gemini no incluye Google Search): es lo que el modelo sabe de la empresa y puede estar desactualizado. Contrástalo.
+        </p>
+      ) : null}
       <p className="text-sm text-slate-800">{r.summary}</p>
       {facts.length ? (
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">

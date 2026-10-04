@@ -21,7 +21,7 @@ import type { JsonSchema, Spec } from "./schema";
 
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
-export type AiKey = { id: string; label: string; apiKey: string; cooldownUntil: Date | null };
+export type AiKey = { id: string; label: string; apiKey: string; cooldownUntil: Date | null; searchBlockedUntil?: Date | null };
 export type ModelState = { cooldownUntil: Date | null; lastRequestAt: Date | null };
 
 export interface KeyStore {
@@ -36,6 +36,8 @@ export interface KeyStore {
   reserve(keyId: string, model: string, minIntervalMs: number, now: Date): Promise<Date>;
   success(keyId: string, model: string, at: Date): Promise<void>;
   failure(keyId: string, model: string, error: string, until: { key?: Date | null; model?: Date | null }, at: Date): Promise<void>;
+  /** La clave no tiene Google Search en su plan: hasta `until`, sus llamadas van sin él. */
+  blockSearch(keyId: string, until: Date): Promise<void>;
 }
 
 export type RunEntry = {
@@ -83,6 +85,8 @@ export type GenerateResult = {
   keyId: string;
   model: string;
   attempts: number;
+  /** Si la respuesta usó Google Search (false si se pidió pero el plan no lo incluye). */
+  searchUsed: boolean;
 };
 
 export type AiErrorKind = "disabled" | "no_keys" | "exhausted" | "bad_request" | "model" | "blocked" | "invalid_output";
@@ -128,10 +132,11 @@ export function nextPacificMidnight(now: Date): Date {
 
 export function classifyFailure(status: number, body: ErrorBody | null, now: Date): Failure {
   const err = body?.error;
-  const message = err?.message?.slice(0, 300) ?? `HTTP ${status}`;
   const details = err?.details ?? [];
   const retryDelay = details.map((d) => parseDelay(d.retryDelay)).find((d) => d !== null) ?? null;
   const quotaIds = details.flatMap((d) => (Array.isArray(d.violations) ? d.violations : [])).map((v) => String((v as { quotaId?: string }).quotaId ?? ""));
+  // El texto de Google es genérico; el identificador de la cuota dice cuál saltó (por minuto, por día, de qué modelo).
+  const message = `${err?.message?.slice(0, 300) ?? `HTTP ${status}`}${quotaIds.filter(Boolean).length ? ` [${quotaIds.filter(Boolean).join(", ")}]` : ""}`;
   const keyInvalid = /API_KEY_INVALID|API key not valid|API key expired/i.test(message) || details.some((d) => d.reason === "API_KEY_INVALID");
 
   if (status === 429) {
@@ -261,16 +266,33 @@ export function createGemini({
       log?.({ feature: req.feature, model, attempts, latencyMs: Date.now() - started, ...entry }).catch(() => {});
 
     for (const model of models) {
-      const body = JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: req.prompt }] }],
-        ...(req.system ? { systemInstruction: { parts: [{ text: req.system }] } } : {}),
-        ...(req.search || req.urlContext ? { tools: [...(req.search ? [{ googleSearch: {} }] : []), ...(req.urlContext ? [{ urlContext: {} }] : [])] } : {}),
-        generationConfig: {
-          temperature: req.temperature ?? 0.3,
-          ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
-          ...(req.schema ? { responseMimeType: "application/json", responseJsonSchema: req.schema } : {}),
-        },
-      });
+      const bodyFor = (withSearch: boolean) =>
+        JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: req.prompt }] }],
+          ...(req.system ? { systemInstruction: { parts: [{ text: req.system }] } } : {}),
+          ...(withSearch || req.urlContext ? { tools: [...(withSearch ? [{ googleSearch: {} }] : []), ...(req.urlContext ? [{ urlContext: {} }] : [])] } : {}),
+          generationConfig: {
+            temperature: req.temperature ?? 0.3,
+            ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
+            ...(req.schema ? { responseMimeType: "application/json", responseJsonSchema: req.schema } : {}),
+          },
+        });
+      const call = async (key: AiKey, withSearch: boolean) => {
+        attempts++;
+        try {
+          const res = await doFetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": key.apiKey },
+            body: bodyFor(withSearch),
+            signal: AbortSignal.timeout(timeoutMs),
+            cache: "no-store",
+          });
+          return { status: res.status, json: (await res.json().catch(() => null)) as unknown };
+        } catch (err) {
+          errors.push(`${key.label}: ${err instanceof Error ? err.message : "error de red"}`);
+          return { status: 0, json: null as unknown };
+        }
+      };
 
       // Varias vueltas por modelo: tras un 429 corto la misma clave puede volver a estar lista.
       for (let round = 0; round < 12; round++) {
@@ -302,21 +324,21 @@ export function createGemini({
         const wait = startAt - now().getTime();
         if (wait > 0) await sleep(wait);
 
-        attempts++;
-        let status = 0;
-        let json: unknown = null;
-        try {
-          const res = await doFetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": best.key.apiKey },
-            body,
-            signal: AbortSignal.timeout(timeoutMs),
-            cache: "no-store",
-          });
-          status = res.status;
-          json = await res.json().catch(() => null);
-        } catch (err) {
-          errors.push(`${best.key.label}: ${err instanceof Error ? err.message : "error de red"}`);
+        const key = best.key;
+        const withSearch = !!req.search && !(key.searchBlockedUntil && key.searchBlockedUntil.getTime() > now().getTime());
+        let { status, json } = await call(key, withSearch);
+        let searchUsed = withSearch;
+        // El plan gratuito de Gemini 3 no incluye Google Search y responde 429: se repite sin él y,
+        // si así funciona, la clave deja de pedirlo durante un día en lugar de quedar en espera.
+        if (status === 429 && withSearch) {
+          const retry = await call(key, false);
+          if (retry.status >= 200 && retry.status < 300) {
+            await store.blockSearch(key.id, new Date(now().getTime() + 24 * 3_600_000));
+            ({ status, json } = retry);
+            searchUsed = false;
+          } else if (retry.status) {
+            ({ status, json } = retry);
+          }
         }
 
         if (status >= 200 && status < 300) {
@@ -324,7 +346,7 @@ export function createGemini({
           try {
             const parsed = parseResponse(json as ResponseBody);
             await finish(model, { keyId: best.key.id, status: "ok", inputTokens: parsed.usage.input, outputTokens: parsed.usage.output, error: null });
-            return { ...parsed, keyId: best.key.id, model, attempts };
+            return { ...parsed, keyId: best.key.id, model, attempts, searchUsed };
           } catch (err) {
             // Respuesta bloqueada o vacía: el problema es el contenido, no la clave.
             await finish(model, { keyId: best.key.id, status: "error", inputTokens: null, outputTokens: null, error: (err as Error).message });

@@ -13,6 +13,8 @@ import { db, getSnapshot } from "@/lib/job-search/server";
 export const metadata = { title: "Radar" };
 export const maxDuration = 300;
 
+const SOURCE: Record<string, string> = { google: "Google Search", greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", remotive: "Remotive", arbeitnow: "Arbeitnow", adzuna: "Adzuna", brave: "Brave Search" };
+
 const STATUS: Record<string, string> = {
   new: "Pendiente de evaluar",
   added: "En la bandeja",
@@ -39,6 +41,7 @@ function LeadRow({ lead, tz, min }: { lead: Lead; tz: string; min: number }) {
         {match?.error ? <p className="mt-0.5 text-xs text-slate-500">{match.error}</p> : null}
         <p className="mt-1 text-[0.7rem] text-slate-500">
           {STATUS[lead.status]} · encontrada {formatDateTime(lead.createdAt, tz)}
+          {lead.source ? ` · vía ${SOURCE[lead.source] ?? lead.source}` : ""}
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -76,7 +79,7 @@ export default async function RadarPage() {
       <PageHeader
         title="Radar"
         count={leads.length}
-        description={`Gemini busca ofertas recientes con Google Search, comprueba que el enlace existe, mide el encaje con tu CV y lleva a la bandeja las que llegan al ${ai.radarMinMatch} %.`}
+        description={`Reúne ofertas recientes de tus fuentes (páginas de empleo de tus empresas objetivo, portales con API y, si tu plan lo incluye, Google Search), mide el encaje con tu CV y lleva a la bandeja las que llegan al ${ai.radarMinMatch} %.`}
         action={
           <AiButton
             action={runRadarAction}
@@ -84,7 +87,7 @@ export default async function RadarPage() {
             label="Buscar ahora"
             pendingLabel="Buscando y evaluando… (puede tardar unos minutos)"
             variant="primary"
-            disabled={!ai.enabled ? "Activa la IA en Ajustes → Inteligencia artificial" : !ai.useSearch ? "Activa el acceso web en Ajustes → IA" : undefined}
+            disabled={!ai.enabled ? "Activa la IA en Ajustes → Inteligencia artificial" : undefined}
           />
         }
       />

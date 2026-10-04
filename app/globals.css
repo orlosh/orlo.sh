@@ -86,7 +86,7 @@
     @apply w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-carbon shadow-xs transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-carbon aria-[invalid=true]:border-red-500;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-carbon px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-black disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-carbon px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-black disabled:opacity-60;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 transition-colors hover:border-slate-300 hover:text-carbon disabled:opacity-60;

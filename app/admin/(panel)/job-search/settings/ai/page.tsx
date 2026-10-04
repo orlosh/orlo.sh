@@ -4,8 +4,9 @@ import { AiButton } from "@/components/admin/job-search/ai";
 import { ActionButton } from "@/components/admin/job-search/ActionButton";
 import { SettingsNav } from "@/components/admin/job-search/SettingsNav";
 import { Badge, Empty, Muted, PageHeader, Section, Table, td } from "@/components/admin/job-search/ui";
-import { addApiKeyAction, runRadarAction, saveAiSettingsAction, testApiKeyAction, updateApiKeyAction } from "@/lib/ai/actions";
+import { addApiKeyAction, runRadarAction, saveAiSettingsAction, saveSourceKeysAction, testApiKeyAction, updateApiKeyAction } from "@/lib/ai/actions";
 import { listAiRuns, listApiKeys, listKeyModels, listRadarRuns, usageByFeature } from "@/lib/ai/admin";
+import { ADZUNA_COUNTRIES, RADAR_SOURCES } from "@/lib/ai/sources";
 import { getAiSettings } from "@/lib/ai/store";
 import { env } from "@/lib/env";
 import { formatDateTime } from "@/lib/job-search/dates";
@@ -125,6 +126,9 @@ export default async function AiSettingsPage() {
                           );
                         })}
                     </ul>
+                    {k.searchBlockedUntil && k.searchBlockedUntil > now ? (
+                      <span className="mt-1 block text-xs text-slate-500">Sin Google Search en su plan (se reintenta {formatDateTime(k.searchBlockedUntil, tz)})</span>
+                    ) : null}
                     {k.lastError ? <span className="mt-1 block max-w-[18rem] text-xs text-slate-500">Último error: {k.lastError}</span> : null}
                   </td>
                   <td className={td}>
@@ -165,8 +169,17 @@ export default async function AiSettingsPage() {
             <legend className="sr-only">General</legend>
             <div className="space-y-3 md:col-span-2">
               <Checkbox name="enabled" label="Activar la IA" defaultChecked={settings.enabled} />
-              <Checkbox name="useSearch" label="Permitir acceso web: Google Search y lectura de URLs (necesario para el radar y para investigar empresas)" defaultChecked={settings.useSearch} />
+              <Checkbox name="useSearch" label="Usar Google Search cuando el plan lo permita" defaultChecked={settings.useSearch} />
+              <p className="-mt-2 pl-6 text-xs text-slate-600">
+                En el plan gratuito, Gemini 3 no incluye Google Search: cada clave que no lo tenga se detecta sola y sus llamadas siguen sin búsqueda, sin errores. La lectura directa
+                de la URL de una oferta es gratuita y se usa siempre.
+              </p>
               <Checkbox name="autoMatch" label="Calcular el encaje con mi CV al importar una oferta" defaultChecked={settings.autoMatch} />
+              <Checkbox
+                name="urlContextFallbackOnly"
+                label="Descargar la oferta desde el servidor y que Gemini solo lea la URL si el servidor no puede (ahorra cuota)"
+                defaultChecked={settings.urlContextFallbackOnly}
+              />
             </div>
             <Checkbox name="modelFallback" label="Si el modelo principal se agota, usar el ligero (Google limita cada modelo por separado)" defaultChecked={settings.modelFallback} />
             <TextField
@@ -201,7 +214,7 @@ export default async function AiSettingsPage() {
             <div className="md:col-span-3">
               <Checkbox name="radarEnabled" label="Radar de ofertas: buscar automáticamente ofertas que encajen" defaultChecked={settings.radarEnabled} />
               <p className="mt-1 text-xs text-slate-600">
-                Busca con Google Search, comprueba que cada enlace existe, mide el encaje con tu CV y añade a la bandeja las que superan el umbral.
+                Reúne ofertas de las fuentes elegidas, descarta las que no encajan con tus búsquedas, mide el encaje con tu CV y añade a la bandeja las que superan el umbral.
                 {cronReady ? "" : " La ejecución programada necesita la variable CRON_SECRET en Vercel; mientras tanto puedes lanzarlo a mano."}
               </p>
             </div>
@@ -212,6 +225,25 @@ export default async function AiSettingsPage() {
               <TextField name="radarLocations" label="Ubicaciones" defaultValue={settings.radarLocations} hint="Separadas por comas." />
               <TextField name="radarExcludedCompanies" label="Empresas excluidas" defaultValue={settings.radarExcludedCompanies} />
             </div>
+            <fieldset className="space-y-2 md:col-span-3">
+              <legend className="field-label">Fuentes</legend>
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                {Object.entries(RADAR_SOURCES).map(([value, label]) => {
+                  const missing = (value === "adzuna" && !settings.adzunaKeyCiphertext) || (value === "brave" && !settings.braveKeyCiphertext);
+                  return (
+                    <label key={value} className="flex items-center gap-2 text-sm text-slate-800">
+                      <input type="checkbox" name="radarSources" value={value} defaultChecked={settings.radarSources.includes(value)} className="size-4 accent-primary" />
+                      {label}
+                      {missing ? <span className="text-xs text-slate-500">· sin clave</span> : null}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-600">
+                Para «Empresas objetivo», guarda en Empresas su URL de empleo de Greenhouse, Lever o Ashby (p. ej. https://jobs.lever.co/empresa). Remotive se consulta una vez por ejecución
+                y sus ofertas se muestran citándolo, como piden sus condiciones.
+              </p>
+            </fieldset>
             <TextField name="radarMinMatch" label="Encaje mínimo (%)" type="number" defaultValue={settings.radarMinMatch} />
             <TextField name="radarMaxPerRun" label="Ofertas evaluadas por ejecución" type="number" defaultValue={settings.radarMaxPerRun} hint="Cada una es una llamada al modelo ligero." />
             <TextField name="radarMaxAgeDays" label="Antigüedad máxima (días)" type="number" defaultValue={settings.radarMaxAgeDays} />
@@ -228,6 +260,52 @@ export default async function AiSettingsPage() {
             </p>
           ) : null}
         </div>
+      </Section>
+
+      <Section title="Fuentes con clave para el radar">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="panel space-y-3 p-4">
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-carbon">Adzuna</span> · buscador de empleo con API gratuita (unas 1.000 llamadas al mes). Crea la clave en{" "}
+              <a href="https://developer.adzuna.com/" target="_blank" rel="noopener noreferrer" className="link">
+                developer.adzuna.com
+              </a>
+              .{" "}
+              {settings.adzunaKeyCiphertext ? (
+                <span className="text-slate-600">
+                  Configurada: app_id {settings.adzunaAppId}, clave ••••{settings.adzunaKeyLast4}.
+                </span>
+              ) : (
+                <span className="text-slate-600">Sin configurar.</span>
+              )}
+            </p>
+            <ActionForm action={saveSourceKeysAction} hidden={{ provider: "adzuna" }} submitLabel="Guardar Adzuna" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <TextField name="appId" label="app_id" defaultValue={settings.adzunaAppId} />
+              <TextField name="appKey" label="app_key" type="password" placeholder={settings.adzunaKeyCiphertext ? "Sin cambios" : ""} />
+              <Select name="country" label="País" options={ADZUNA_COUNTRIES.map((c) => ({ value: c, label: c.toUpperCase() }))} defaultValue={settings.adzunaCountry} />
+              {settings.adzunaKeyCiphertext ? (
+                <div className="sm:col-span-3">
+                  <Checkbox name="clear" label="Borrar las credenciales de Adzuna" />
+                </div>
+              ) : null}
+            </ActionForm>
+          </div>
+          <div className="panel space-y-3 p-4">
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-carbon">Brave Search</span> · busca en la web ofertas parecidas en Greenhouse, Lever y Ashby para descubrir empresas que contratan para tu perfil;
+              de cada una se lee su tablón completo. Requiere tarjeta: Brave da unos 5 $ de crédito al mes (≈1.000 búsquedas) y el radar usa como mucho 2 por ejecución. Clave en{" "}
+              <a href="https://api-dashboard.search.brave.com/" target="_blank" rel="noopener noreferrer" className="link">
+                api-dashboard.search.brave.com
+              </a>
+              . {settings.braveKeyCiphertext ? <span className="text-slate-600">Configurada: ••••{settings.braveKeyLast4}.</span> : <span className="text-slate-600">Sin configurar.</span>}
+            </p>
+            <ActionForm action={saveSourceKeysAction} hidden={{ provider: "brave" }} submitLabel="Guardar Brave" className="space-y-4">
+              <TextField name="apiKey" label="Clave de la API" type="password" placeholder={settings.braveKeyCiphertext ? "Sin cambios" : ""} />
+              {settings.braveKeyCiphertext ? <Checkbox name="clear" label="Borrar la clave de Brave" /> : null}
+            </ActionForm>
+          </div>
+        </div>
+        <p className="text-xs text-slate-600">Para usarlas, márcalas también en las fuentes del radar (arriba). Se guardan cifradas y no se vuelven a mostrar.</p>
       </Section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">

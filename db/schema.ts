@@ -811,6 +811,17 @@ export const aiSettings = pgTable(
     radarMaxPerRun: smallint("radar_max_per_run").notNull().default(8),
     radarMaxAgeDays: smallint("radar_max_age_days").notNull().default(14),
     radarFrequencyDays: smallint("radar_frequency_days").notNull().default(1),
+    /** De dónde saca ofertas el radar (ver lib/ai/sources.ts). */
+    radarSources: text("radar_sources").array().notNull().default(sql`'{companies,remotive,arbeitnow,google}'`),
+    /** Gemini solo lee la URL de una oferta si el servidor no ha podido descargarla (ahorra cuota). */
+    urlContextFallbackOnly: boolean("url_context_fallback_only").notNull().default(true),
+    // Credenciales de fuentes externas del radar, cifradas como las claves de Gemini.
+    adzunaAppId: text("adzuna_app_id"),
+    adzunaKeyCiphertext: text("adzuna_key_ciphertext"),
+    adzunaKeyLast4: text("adzuna_key_last4"),
+    adzunaCountry: text("adzuna_country").notNull().default("es"),
+    braveKeyCiphertext: text("brave_key_ciphertext"),
+    braveKeyLast4: text("brave_key_last4"),
     radarLastRunAt: timestamp("radar_last_run_at", { withTimezone: true }),
     /** Tiempo máximo de trabajo por ejecución del radar (la función tiene su propio límite). */
     timeBudgetSeconds: smallint("time_budget_seconds").notNull().default(240),
@@ -846,6 +857,11 @@ export const aiApiKeys = pgTable("ai_api_keys", {
   lastError: text("last_error"),
   /** Hasta cuándo no se usa (límite alcanzado, clave rechazada…). */
   cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+  /**
+   * Hasta cuándo se piden las llamadas sin Google Search: el plan gratuito de Gemini 3 no lo
+   * incluye y responde 429. Se vuelve a probar pasado este plazo (por si se activa la facturación).
+   */
+  searchBlockedUntil: timestamp("search_blocked_until", { withTimezone: true }),
   ...timestamps,
 });
 
@@ -923,6 +939,8 @@ export const jobLeads = pgTable(
     location: text("location"),
     postedAt: date("posted_at", { mode: "string" }),
     snippet: text("snippet"),
+    /** Fuente del radar que la encontró (google, greenhouse, lever, ashby, remotive, arbeitnow). */
+    source: text("source"),
     status: jobLeadStatus("status").notNull().default("new"),
     matchScore: smallint("match_score"),
     /** Resultado del encaje (motivos, gaps, citas verificadas). */

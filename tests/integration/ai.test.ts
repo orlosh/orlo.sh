@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import * as t from "@/db/schema";
-import { addApiKey, aiSettingsInput, listApiKeys, saveAiSettings } from "@/lib/ai/admin";
+import { addApiKey, aiSettingsInput, listApiKeys, saveAiSettings, saveSourceKeys } from "@/lib/ai/admin";
 import { generateCoverLetter, importOpportunity } from "@/lib/ai/features";
 import { AiError } from "@/lib/ai/gemini";
 import { runRadar } from "@/lib/ai/radar";
@@ -46,7 +46,8 @@ function fakeWeb(gemini: Gemini, pages: Record<string, () => Response>) {
       return gemini(prompt, key);
     }
     calls.push({ url });
-    const page = pages[url];
+    // Clave exacta o prefijo terminado en "*".
+    const page = pages[url] ?? Object.entries(pages).find(([k]) => k.endsWith("*") && url.startsWith(k.slice(0, -1)))?.[1];
     return page ? page() : new Response("not found", { status: 404, headers: { "content-type": "text/html" } });
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -62,7 +63,7 @@ const JOB_HTML = `<html><head><title>Backend</title><script type="application/ld
   hiringOrganization: { name: "Initech" },
   jobLocationType: "TELECOMMUTE",
   baseSalary: { currency: "EUR", value: { minValue: 60000, maxValue: 75000, unitText: "YEAR" } },
-})}</script></head><body><h1>Senior Backend Engineer</h1><p>${"Construimos APIs. ".repeat(20)}</p></body></html>`;
+})}</script></head><body><h1>Senior Backend Engineer</h1><p>${"Construimos APIs de pagos para millones de usuarios. ".repeat(20)}</p></body></html>`;
 
 const EXTRACTION = {
   title: "Backend Engineer (Senior)",
@@ -107,6 +108,8 @@ async function setup({ enabled = true, keys = 2 } = {}) {
       radarFrequencyDays: "1",
       timeBudgetSeconds: "120",
       requestsPerMinute: "5",
+      radarSources: ["google"],
+      urlContextFallbackOnly: true,
       modelFallback: true,
     }),
   );
@@ -149,13 +152,9 @@ describe("keys", () => {
 
 describe("import from URL", () => {
   it("reads the page, merges JSON-LD over the AI, rotates keys on 429 and verifies CV quotes", async () => {
-    let first = true;
     const web = fakeWeb(
-      (prompt) => {
-        if (first) {
-          first = false;
-          return json(429, { error: { code: 429, message: "Resource exhausted", details: [{ retryDelay: "30s" }] } });
-        }
+      (prompt, key) => {
+        if (key === "AIzaTestKeyNumber1xxxxxxxxxxxx") return json(429, { error: { code: 429, message: "Resource exhausted", details: [{ retryDelay: "30s" }] } });
         if (prompt.includes("Extrae la información")) return answer(EXTRACTION, { groundingMetadata: { groundingChunks: [{ web: { uri: "https://news.example/initech", title: "Initech" } }] } });
         if (prompt.includes("Evalúa el encaje")) return answer(MATCH);
         throw new Error(`prompt inesperado: ${prompt.slice(0, 80)}`);
@@ -190,12 +189,28 @@ describe("import from URL", () => {
     const runs = await db.select().from(t.aiRuns);
     expect(runs.map((x) => [x.feature, x.status, x.attempts])).toEqual(
       expect.arrayContaining([
-        ["import", "ok", 2],
+        ["import", "ok", 3], // clave 1 con Search, clave 1 sin Search, clave 2
         ["match", "ok", 1],
       ]),
     );
     // El CV y la oferta se enviaron como datos delimitados, no como instrucciones sueltas.
     expect(web.calls.find((c) => c.prompt?.includes("Evalúa el encaje"))?.prompt).toContain("<<<CANDIDATO");
+  });
+
+  it("lets Gemini read the URL only when the server could not", async () => {
+    const bodies: string[] = [];
+    const web = fakeWeb((p) => (p.includes("Extrae") ? answer(EXTRACTION) : answer(MATCH)), { [JOB_URL]: () => html(JOB_HTML) });
+    const spy = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("generativelanguage")) bodies.push(String(init?.body));
+      return web.fetchImpl(input, init);
+    }) as typeof fetch;
+    await importOpportunity(await aiContext(db, SECRET, { fetchImpl: spy, ...clock() }), ACTOR, { url: JOB_URL });
+    expect(JSON.parse(bodies[0]).tools).toEqual([{ googleSearch: {} }]);
+
+    const DEAD = "https://93.184.216.34/jobs/spa";
+    await importOpportunity(await aiContext(db, SECRET, { fetchImpl: spy, ...clock() }), ACTOR, { url: DEAD });
+    const last = bodies.map((b) => JSON.parse(b)).filter((b) => b.contents[0].parts[0].text.includes("Extrae")).at(-1);
+    expect(last.tools).toEqual([{ googleSearch: {} }, { urlContext: {} }]);
   });
 
   it("only fills gaps when re-analysing an existing opportunity", async () => {
@@ -305,8 +320,73 @@ describe("radar", () => {
     expect(second).toMatchObject({ added: 1, status: "ok" });
   });
 
-  it("requires web access and a CV", async () => {
-    await db.update(t.aiSettings).set({ useSearch: false });
+  it("works on the free plan with public sources: target companies' boards and job APIs", async () => {
+    await db.update(t.aiSettings).set({ radarSources: ["companies", "remotive"], useSearch: false });
+    const co = await m.createCompany(db, ACTOR, { name: "Globex", tier: "a", interest: null, website: null, careersUrl: "https://jobs.lever.co/globex", industry: null, notes: null, nextAction: null, nextActionAt: null, archived: false });
+    expect(co).toBeTruthy();
+    const desc = "Node.js TypeScript PostgreSQL. ".repeat(20);
+    const web = fakeWeb((prompt) => {
+      if (prompt.includes("Busca ofertas")) throw new Error("no debería usar Google Search");
+      return answer(prompt.includes("Backend Engineer") ? { ...MATCH, score: 92 } : { ...MATCH, score: 40 });
+    }, {
+      "https://api.lever.co/v0/postings/globex?mode=json": () =>
+        json(200, [
+          { text: "Backend Engineer", hostedUrl: "https://jobs.lever.co/globex/1", categories: { location: "Remote" }, createdAt: NOW.getTime() - 86_400_000, descriptionPlain: desc },
+          { text: "Office Manager", hostedUrl: "https://jobs.lever.co/globex/2", categories: { location: "Remote" }, createdAt: NOW.getTime(), descriptionPlain: desc },
+        ]),
+      "https://remotive.com/api/remote-jobs?search=backend%20engineer%20node%20js&limit=50": () =>
+        json(200, { jobs: [{ title: "Senior Backend Engineer Node.js", url: "https://remotive.com/remote-jobs/9", company_name: "Initech", candidate_required_location: "Europe", publication_date: "2026-10-05T00:00:00", description: `<p>${desc}</p>` }] }),
+    });
+    const r = await runRadar(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() }), "manual", ACTOR);
+    const [run] = await db.select().from(t.jobRadarRuns);
+    expect(r, JSON.stringify(run.log)).toMatchObject({ found: 2, evaluated: 2, added: 2 });
+    const leads = await db.select().from(t.jobLeads);
+    expect(leads.map((l) => [l.title, l.source, l.status]).sort()).toEqual([
+      ["Backend Engineer", "lever", "added"],
+      ["Senior Backend Engineer Node.js", "remotive", "added"],
+    ]);
+    // Las ofertas de APIs oficiales no se descargan de nuevo: el texto ya venía en la respuesta.
+    expect(web.calls.some((c) => c.url.startsWith("https://jobs.lever.co/"))).toBe(false);
+    // Ninguna llamada a Gemini pidió Google Search.
+    expect(web.calls.filter((c) => c.prompt).length).toBe(2);
+  });
+
+  it("stores source credentials encrypted and uses Adzuna and Brave-discovered boards", async () => {
+    await saveSourceKeys(db, ACTOR, { provider: "adzuna", clear: false, appId: "myapp", appKey: "adzunaSecretKey123", country: "es" }, SECRET);
+    await saveSourceKeys(db, ACTOR, { provider: "brave", clear: false, apiKey: "braveSecretKey456" }, SECRET);
+    const [row] = await owner.select().from(t.aiSettings);
+    expect(row).toMatchObject({ adzunaAppId: "myapp", adzunaKeyLast4: "y123", braveKeyLast4: "y456" });
+    expect(row.adzunaKeyCiphertext).not.toContain("adzunaSecret");
+    const audit = await owner.select().from(t.auditLog).where(eq(t.auditLog.entity, "aiSettings"));
+    expect(JSON.stringify(audit)).not.toContain("SecretKey");
+
+    await db.update(t.aiSettings).set({ radarSources: ["adzuna", "brave"], useSearch: false });
+    const desc = "Node.js TypeScript PostgreSQL. ".repeat(20);
+    const ADZ = "https://93.184.216.34/adzuna/land/1";
+    const web = fakeWeb((prompt) => answer(prompt.includes("Backend") ? { ...MATCH, score: 88 } : { ...MATCH, score: 30 }), {
+      "https://api.adzuna.com/v1/api/jobs/es/search/1?*": () =>
+        json(200, { results: [{ title: "Backend Engineer", redirect_url: ADZ, company: { display_name: "Initech" }, location: { display_name: "Madrid" }, created: "2026-10-06T00:00:00Z", description: "Extracto corto de la oferta para Node.js y PostgreSQL ".repeat(4) }] }),
+      [ADZ]: () => html(`<h1>Backend Engineer</h1><p>${desc}</p>`),
+      "https://api.search.brave.com/res/v1/web/search?*": () => json(200, { web: { results: [{ url: "https://jobs.ashbyhq.com/hooli/1", title: "Backend Engineer" }] } }),
+      "https://api.ashbyhq.com/posting-api/job-board/hooli?includeCompensation=true": () =>
+        json(200, { jobs: [{ title: "Backend Engineer, Platform", jobUrl: "https://jobs.ashbyhq.com/hooli/1", location: "Remote", publishedAt: "2026-10-05T00:00:00Z", isRemote: true, descriptionPlain: desc }] }),
+    });
+    const r = await runRadar(await aiContext(db, SECRET, { fetchImpl: web.fetchImpl, ...clock() }), "manual", ACTOR);
+    const [run] = await db.select().from(t.jobRadarRuns);
+    expect(r, JSON.stringify(run.log)).toMatchObject({ found: 2, evaluated: 2, added: 2 });
+    const leads = await db.select().from(t.jobLeads);
+    expect(leads.map((l) => l.source).sort()).toEqual(["adzuna", "brave"]);
+    // La credencial de Brave viaja en la cabecera; la de Adzuna, a su API.
+    expect(web.calls.some((c) => c.url.startsWith("https://api.adzuna.com/") && c.url.includes("app_key=adzunaSecretKey123"))).toBe(true);
+    // Adzuna solo da un extracto: la oferta se descargó para evaluarla con el texto completo.
+    expect(web.calls.some((c) => c.url === ADZ)).toBe(true);
+
+    await saveSourceKeys(db, ACTOR, { provider: "brave", clear: true, apiKey: "" }, SECRET);
+    expect((await owner.select().from(t.aiSettings))[0].braveKeyCiphertext).toBeNull();
+  });
+
+  it("requires a CV", async () => {
+    await db.delete(t.jobDocuments);
     await expect(runRadar(await aiContext(db, SECRET), "manual", ACTOR)).rejects.toBeInstanceOf(AiError);
   });
 });

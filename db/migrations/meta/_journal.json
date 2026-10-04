@@ -36,6 +36,20 @@
       "when": 1791057578206,
       "tag": "0004_ai_pacing",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791084201588,
+      "tag": "0005_radar_sources",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791085302594,
+      "tag": "0006_radar_external_sources",
+      "breakpoints": true
     }
   ]
 }
