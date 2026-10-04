@@ -1,0 +1,4 @@
+# Falsos positivos: credenciales inventadas en un test de integración (commit d79752d), ya
+# sustituidas por constantes marcadas con gitleaks:allow. No son claves reales.
+d79752dc3dc62242e40a0cd064dc498768e5fd03:tests/integration/ai.test.ts:generic-api-key:355
+d79752dc3dc62242e40a0cd064dc498768e5fd03:tests/integration/ai.test.ts:generic-api-key:380

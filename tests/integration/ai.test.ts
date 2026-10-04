@@ -14,6 +14,9 @@ const { app: db, owner, reset, close } = connect();
 afterAll(close);
 
 const SECRET = "integration-secret-".padEnd(48, "x");
+// Credenciales inventadas para los tests de las fuentes del radar (no son claves reales).
+const FAKE_ADZUNA_KEY = "fake-adzuna-key-y123"; // gitleaks:allow
+const FAKE_BRAVE_KEY = "fake-brave-key-y456"; // gitleaks:allow
 const NOW = new Date("2026-10-07T10:00:00Z");
 const CV = [
   "Backend Engineer en Foo (2020 – actualidad)",
@@ -352,13 +355,14 @@ describe("radar", () => {
   });
 
   it("stores source credentials encrypted and uses Adzuna and Brave-discovered boards", async () => {
-    await saveSourceKeys(db, ACTOR, { provider: "adzuna", clear: false, appId: "myapp", appKey: "adzunaSecretKey123", country: "es" }, SECRET);
-    await saveSourceKeys(db, ACTOR, { provider: "brave", clear: false, apiKey: "braveSecretKey456" }, SECRET);
+    await saveSourceKeys(db, ACTOR, { provider: "adzuna", clear: false, appId: "myapp", appKey: FAKE_ADZUNA_KEY, country: "es" }, SECRET);
+    await saveSourceKeys(db, ACTOR, { provider: "brave", clear: false, apiKey: FAKE_BRAVE_KEY }, SECRET);
     const [row] = await owner.select().from(t.aiSettings);
     expect(row).toMatchObject({ adzunaAppId: "myapp", adzunaKeyLast4: "y123", braveKeyLast4: "y456" });
-    expect(row.adzunaKeyCiphertext).not.toContain("adzunaSecret");
+    expect(row.adzunaKeyCiphertext).not.toContain(FAKE_ADZUNA_KEY);
     const audit = await owner.select().from(t.auditLog).where(eq(t.auditLog.entity, "aiSettings"));
-    expect(JSON.stringify(audit)).not.toContain("SecretKey");
+    expect(JSON.stringify(audit)).not.toContain(FAKE_ADZUNA_KEY);
+    expect(JSON.stringify(audit)).not.toContain(FAKE_BRAVE_KEY);
 
     await db.update(t.aiSettings).set({ radarSources: ["adzuna", "brave"], useSearch: false });
     const desc = "Node.js TypeScript PostgreSQL. ".repeat(20);
@@ -377,7 +381,7 @@ describe("radar", () => {
     const leads = await db.select().from(t.jobLeads);
     expect(leads.map((l) => l.source).sort()).toEqual(["adzuna", "brave"]);
     // La credencial de Brave viaja en la cabecera; la de Adzuna, a su API.
-    expect(web.calls.some((c) => c.url.startsWith("https://api.adzuna.com/") && c.url.includes("app_key=adzunaSecretKey123"))).toBe(true);
+    expect(web.calls.some((c) => c.url.startsWith("https://api.adzuna.com/") && new URL(c.url).searchParams.get("app_key") === FAKE_ADZUNA_KEY)).toBe(true);
     // Adzuna solo da un extracto: la oferta se descargó para evaluarla con el texto completo.
     expect(web.calls.some((c) => c.url === ADZ)).toBe(true);
 
